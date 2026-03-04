@@ -12,12 +12,15 @@ services:
       - GIT_USER_NAME=${GIT_USER_NAME}
       - GIT_USER_EMAIL=${GIT_USER_EMAIL}
       - SSH_AUTH_SOCK=${SSH_AUTH_SOCK}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
     volumes:
       - ${HOST_CODE_DIR}:/home/coder/code
       - code-server-extensions:/home/coder/.local/share/code-server/extensions
       - ./config/settings.json:/home/coder/.local/share/code-server/User/settings.json
       - ${SSH_AUTH_SOCK}:${SSH_AUTH_SOCK}
+      - npm-cache:/home/coder/.npm
     restart: unless-stopped
 
 volumes:
   code-server-extensions:
+  npm-cache:

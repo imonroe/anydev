@@ -73,6 +73,14 @@ RUN curl -fsSL https://github.com/drush-ops/drush-launcher/releases/latest/downl
 # --- Switch to coder user for extensions and config ---
 USER coder
 
+# Configure npm global prefix for coder user (avoids needing root for npm install -g)
+RUN mkdir -p /home/coder/.npm-global \
+    && npm config set prefix /home/coder/.npm-global
+ENV PATH="/home/coder/.npm-global/bin:${PATH}"
+
+# Install Claude Code globally as coder user
+RUN npm install -g @anthropic-ai/claude-code
+
 # Pre-create settings directory to prevent bind-mount from creating it as a directory
 RUN mkdir -p /home/coder/.local/share/code-server/User
 
