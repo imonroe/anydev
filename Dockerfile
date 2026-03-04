@@ -81,8 +81,10 @@ ENV PATH="/home/coder/.npm-global/bin:${PATH}"
 # Install Claude Code globally as coder user
 RUN npm install -g @anthropic-ai/claude-code
 
-# Pre-create settings directory to prevent bind-mount from creating it as a directory
-RUN mkdir -p /home/coder/.local/share/code-server/User
+# Pre-create directories to prevent bind-mounts from creating them as directories
+RUN mkdir -p /home/coder/.local/share/code-server/User \
+    && mkdir -p /home/coder/.claude \
+    && touch /home/coder/.claude.json
 
 # Install VS Code extensions from extensions.txt
 COPY extensions.txt /home/coder/extensions.txt
