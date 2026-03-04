@@ -1,0 +1,15 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "/home/ian/code/anydev/logs/.7411fbfa1ed6473596efdf69e45959b3d79b1a09-audit.json",
+    "files": [
+        {
+            "date": 1772651531437,
+            "name": "/home/ian/code/anydev/logs/mcp-puppeteer-2026-03-04.log",
+            "hash": "9c50c7dda80931b67e212b8f2388e1f16e79d0541732f5a4beb2a88d3c236cc2"
+        }
+    ],
+    "hashType": "sha256"
+}
