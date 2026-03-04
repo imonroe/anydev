@@ -6,47 +6,234 @@ Built for PHP/Drupal development, with Composer, Drush Launcher, and a curated s
 
 ---
 
-## What's included
+## What's Included
 
 - **Code Server** — VS Code in the browser, accessible on a configurable local port
 - **PHP 8.3** + Composer + Drush Launcher
-- **Node.js LTS** + npm + yarn
+- **Node.js 22 LTS** + npm + yarn
 - **Python 3** + pip
 - **Git** with SSH agent forwarding for push/pull access
 - Declarative VS Code extension management via `extensions.txt`
 - Settings synced via git through `config/settings.json`
 
-## How it works
+## How It Works
 
 Your code lives on the host filesystem (`~/code`) and is mounted into the container as a volume. The container provides the tooling; your files stay on disk and are never at risk when the container is rebuilt or removed.
 
-[Lando](https://lando.dev/) continues to manage application stacks (web server, database, PHP-FPM) independently on the host. The Code Server container handles editing, git, Composer, and npm — not the application runtime.
+[Lando](https://lando.dev/) continues to manage application stacks (web server, database, PHP-FPM) independently on the host. The Code Server terminal handles editing, git, Composer, and npm — not the application runtime.
 
 ---
 
-## Setup
+## Prerequisites
 
-See [`docs/implementation_plan.md`](docs/implementation_plan.md) for the full implementation plan and architecture decisions.
-
-> This project is currently in development. Setup instructions will be added here once the initial build is complete.
+- **WSL2** with a Linux distribution installed
+- **Docker** with the WSL2 backend enabled
+- **SSH agent** running with your keys loaded (`ssh-add -l` to verify)
 
 ---
 
-## Project structure
+## First-Time Setup
+
+1. **Clone this repository:**
+   ```sh
+   git clone <repo-url> && cd anydev
+   ```
+
+2. **Create your `.env` file:**
+   ```sh
+   cp .env.example .env
+   ```
+
+3. **Fill in your `.env` values:**
+   ```sh
+   # Find your UID/GID
+   id -u    # USER_UID
+   id -g    # USER_GID
+
+   # Find your SSH agent socket
+   echo $SSH_AUTH_SOCK    # SSH_AUTH_SOCK
+   ```
+   Set `CODE_SERVER_PASSWORD` to a strong password. Set `HOST_CODE_DIR` to the absolute path of your code directory (e.g., `/home/ian/code`). Fill in `GIT_USER_NAME` and `GIT_USER_EMAIL`.
+
+4. **Build and start:**
+   ```sh
+   docker compose build
+   docker compose up -d
+   ```
+
+5. **Open Code Server:**
+   Navigate to `http://localhost:8080` (or your configured `CODE_SERVER_PORT`) and enter your password.
+
+---
+
+## SSH Agent Setup
+
+SSH agent forwarding lets you use your host SSH keys inside the container for git operations without exposing private key files.
+
+1. Ensure your SSH agent is running and keys are loaded:
+   ```sh
+   eval "$(ssh-agent -s)"
+   ssh-add ~/.ssh/id_ed25519    # or your key path
+   ssh-add -l                   # verify keys are loaded
+   ```
+
+2. Set `SSH_AUTH_SOCK` in your `.env` to the output of:
+   ```sh
+   echo $SSH_AUTH_SOCK
+   ```
+
+3. **Important:** The socket path changes after reboots and agent restarts. If SSH stops working inside the container, update `SSH_AUTH_SOCK` in `.env` and restart:
+   ```sh
+   docker compose down && docker compose up -d
+   ```
+
+4. Test from inside the Code Server terminal:
+   ```sh
+   ssh -T git@github.com
+   ```
+
+---
+
+## Daily Usage
+
+```sh
+# Start the environment
+docker compose up -d
+
+# Stop the environment
+docker compose down
+
+# View logs
+docker compose logs -f code-server
+```
+
+Access Code Server at `http://localhost:8080` (or your configured port).
+
+---
+
+## Lando Workflow
+
+Lando commands run in a **separate WSL2 terminal** on the host — not inside Code Server:
+
+```sh
+# In a WSL2 host terminal:
+cd ~/code/my-drupal-site
+lando start
+lando drush cr
+```
+
+Use the Code Server terminal for git, Composer, npm, and Python tasks:
+
+```sh
+# In Code Server terminal:
+cd /home/coder/code/my-drupal-site
+git pull
+composer install
+npm run build
+```
+
+---
+
+## Adding Extensions
+
+**For permanent additions** (persist across rebuilds):
+1. Add the extension ID to `extensions.txt`
+2. Rebuild: `docker compose build && docker compose up -d`
+3. If extensions don't appear, delete the named volume (see Rebuilding below)
+
+**For session-persistent additions** (persist across restarts, not rebuilds):
+- Install interactively through the Code Server Extensions panel
+- These are stored in a named Docker volume
+
+---
+
+## Rebuilding the Image
+
+When you change the Dockerfile, extensions.txt, or entrypoint.sh:
+
+```sh
+docker compose down
+docker compose build
+docker compose up -d
+```
+
+If you added new extensions to `extensions.txt` and they don't appear, the named volume is caching old extensions:
+
+```sh
+docker compose down
+docker volume rm anydev_code-server-extensions
+docker compose build
+docker compose up -d
+```
+
+---
+
+## Changing PHP or Node Versions
+
+Edit the build args in `docker-compose.yml` or pass them on the command line:
+
+```sh
+docker compose build --build-arg PHP_VERSION=8.2 --build-arg NODE_MAJOR=20
+docker compose up -d
+```
+
+---
+
+## Advanced: Docker Socket Access
+
+To run Docker or Lando commands from inside the Code Server terminal, you can mount the host Docker socket. **This grants the container root-equivalent access to the host Docker daemon.**
+
+```sh
+cp docker-compose.override.yml.example docker-compose.override.yml
+docker compose up -d
+```
+
+See `docker-compose.override.yml.example` for details and security warnings.
+
+---
+
+## Troubleshooting
+
+**SSH agent not working:**
+- Verify `SSH_AUTH_SOCK` in `.env` matches `echo $SSH_AUTH_SOCK` on the host
+- The socket path changes after reboots — update `.env` and restart
+- Ensure your host UID matches `USER_UID` in `.env` (`id -u` to check)
+
+**Files have wrong ownership on host:**
+- `USER_UID` and `USER_GID` in `.env` must match your WSL2 user (`id -u`, `id -g`)
+- Rebuild after changing: `docker compose build && docker compose up -d`
+
+**Extensions missing after rebuild:**
+- Named volume caches old extensions — delete it:
+  ```sh
+  docker volume rm anydev_code-server-extensions
+  ```
+
+**Code Server shows default settings:**
+- Ensure `config/settings.json` exists before starting the container
+- Check that the file is not empty and contains valid JSON
+
+**`docker compose up` fails with invalid volume:**
+- `SSH_AUTH_SOCK` may be empty in `.env` — set it or comment out the SSH socket volume in `docker-compose.yml` if not needed
+
+---
+
+## Project Structure
 
 ```
 anydev/
 ├── Dockerfile                          # Image definition
 ├── docker-compose.yml                  # Service configuration
-├── docker-compose.override.yml.example # Optional local overrides (e.g. Docker socket)
+├── docker-compose.override.yml.example # Optional local overrides (e.g., Docker socket)
 ├── .env.example                        # Required environment variables
+├── .dockerignore                       # Build context filtering
 ├── entrypoint.sh                       # Container startup script
 ├── extensions.txt                      # Declarative VS Code extension list
 ├── config/
 │   └── settings.json                   # VS Code settings (committed, bind-mounted)
 └── docs/
-    ├── product_requirements.md
-    └── implementation_plan.md
+    ├── product_requirements.md         # Full PRD
+    └── implementation_plan.md          # Architecture and implementation details
 ```
 
 ---

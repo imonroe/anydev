@@ -1,0 +1,23 @@
+services:
+  code-server:
+    build:
+      context: .
+      args:
+        USER_UID: ${USER_UID:-1000}
+        USER_GID: ${USER_GID:-1000}
+    ports:
+      - "${CODE_SERVER_PORT:-8080}:8080"
+    environment:
+      - PASSWORD=${CODE_SERVER_PASSWORD}
+      - GIT_USER_NAME=${GIT_USER_NAME}
+      - GIT_USER_EMAIL=${GIT_USER_EMAIL}
+      - SSH_AUTH_SOCK=${SSH_AUTH_SOCK}
+    volumes:
+      - ${HOST_CODE_DIR}:/home/coder/code
+      - code-server-extensions:/home/coder/.local/share/code-server/extensions
+      - ./config/settings.json:/home/coder/.local/share/code-server/User/settings.json
+      - ${SSH_AUTH_SOCK}:${SSH_AUTH_SOCK}
+    restart: unless-stopped
+
+volumes:
+  code-server-extensions:

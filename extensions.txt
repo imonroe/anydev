@@ -1,0 +1,9 @@
+bmewburn.vscode-intelephense-client    # PHP IntelliSense
+xdebug.php-debug                       # Xdebug integration
+esbenp.prettier-vscode                 # Prettier formatter
+dbaeumer.vscode-eslint                 # ESLint
+ms-python.python                       # Python language support
+redhat.vscode-yaml                     # YAML support (Drupal config)
+eamodio.gitlens                        # Git history visualization
+EditorConfig.EditorConfig              # .editorconfig support (Drupal standards)
+streetsidesoftware.code-spell-checker  # Spell checking
