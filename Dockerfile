@@ -101,3 +101,4 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 WORKDIR /home/coder/code
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["code-server", "--bind-addr", "0.0.0.0:8080", "."]

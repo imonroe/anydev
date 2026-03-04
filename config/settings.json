@@ -6,5 +6,6 @@
   "files.insertFinalNewline": true,
   "php.validate.executablePath": "/usr/bin/php",
   "terminal.integrated.defaultProfile.linux": "bash",
-  "git.autofetch": false
+  "git.autofetch": false,
+  "workbench.colorTheme": "Default Dark Modern"
 }

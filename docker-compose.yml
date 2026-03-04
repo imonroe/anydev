@@ -16,7 +16,7 @@ services:
       - ${HOST_CODE_DIR}:/home/coder/code
       - code-server-extensions:/home/coder/.local/share/code-server/extensions
       - ./config/settings.json:/home/coder/.local/share/code-server/User/settings.json
-      - ${SSH_AUTH_SOCK}:${SSH_AUTH_SOCK}
+      # - ${SSH_AUTH_SOCK}:${SSH_AUTH_SOCK}
       - npm-cache:/home/coder/.npm
       - ${CLAUDE_CONFIG_DIR:-~/.claude}:/home/coder/.claude
       - ${CLAUDE_CREDENTIALS:-~/.claude.json}:/home/coder/.claude.json
