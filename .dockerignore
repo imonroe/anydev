@@ -1,0 +1,9 @@
+.env
+.git/
+docker-compose.override.yml
+logs/
+README.md
+CLAUDE.md
+docs/
+*.md
+!extensions.txt
