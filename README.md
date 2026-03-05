@@ -20,7 +20,7 @@ Built for PHP/Drupal development, with Composer, Drush Launcher, and a curated s
 
 Your code lives on the host filesystem (`~/code`) and is mounted into the container as a volume. The container provides the tooling; your files stay on disk and are never at risk when the container is rebuilt or removed.
 
-[Lando](https://lando.dev/) continues to manage application stacks (web server, database, PHP-FPM) independently on the host. The Code Server terminal handles editing, git, Composer, and npm — not the application runtime.
+[Lando](https://lando.dev/) continues to manage application stacks (web server, database, PHP-FPM) independently on the host. The Code Server container handles editing via the VS Code interface and provides a terminal for git, Composer, and npm — not the application runtime.
 
 ---
 
