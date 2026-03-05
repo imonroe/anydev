@@ -89,11 +89,19 @@ RUN mkdir -p /home/coder/.local/share/code-server/User \
 
 # Install VS Code extensions from extensions.txt
 COPY extensions.txt /home/coder/extensions.txt
-RUN while IFS= read -r ext || [ -n "$ext" ]; do \
+RUN failed_exts=""; \
+    while IFS= read -r ext || [ -n "$ext" ]; do \
       ext=$(echo "$ext" | sed 's/#.*//;s/^[[:space:]]*//;s/[[:space:]]*$//'); \
       [ -z "$ext" ] && continue; \
-      code-server --install-extension "$ext" || true; \
-    done < /home/coder/extensions.txt
+      if ! code-server --install-extension "$ext"; then \
+        echo "Failed to install VS Code extension: $ext" >&2; \
+        failed_exts="${failed_exts} $ext"; \
+      fi; \
+    done < /home/coder/extensions.txt; \
+    if [ -n "$failed_exts" ]; then \
+      echo "One or more VS Code extensions failed to install:${failed_exts}" >&2; \
+      exit 1; \
+    fi
 
 # Copy entrypoint script
 COPY --chown=coder:coder entrypoint.sh /usr/local/bin/entrypoint.sh
