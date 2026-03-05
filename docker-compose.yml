@@ -13,7 +13,7 @@ services:
       - GIT_USER_EMAIL=${GIT_USER_EMAIL}
       - SSH_AUTH_SOCK=${SSH_AUTH_SOCK}
     volumes:
-      - ${HOST_CODE_DIR}:/home/coder/code
+      - ${HOST_CODE_DIR:?HOST_CODE_DIR must be set to an absolute host path}:/home/coder/code
       - code-server-extensions:/home/coder/.local/share/code-server/extensions
       - ./config/settings.json:/home/coder/.local/share/code-server/User/settings.json
       # - ${SSH_AUTH_SOCK}:${SSH_AUTH_SOCK}
