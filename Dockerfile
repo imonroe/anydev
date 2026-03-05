@@ -75,7 +75,8 @@ USER coder
 
 # Configure npm global prefix for coder user (avoids needing root for npm install -g)
 RUN mkdir -p /home/coder/.npm-global \
-    && npm config set prefix /home/coder/.npm-global
+    && npm config set prefix /home/coder/.npm-global \
+    && echo 'export PATH="/home/coder/.npm-global/bin:$PATH"' >> /home/coder/.bashrc
 ENV PATH="/home/coder/.npm-global/bin:${PATH}"
 
 # Install Claude Code globally as coder user
