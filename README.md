@@ -161,16 +161,19 @@ docker compose up -d
 
 ---
 
-## Advanced: Docker Socket Access
+## Advanced: Optional Mounts
 
-To run Docker or Lando commands from inside the Code Server terminal, you can mount the host Docker socket. **This grants the container root-equivalent access to the host Docker daemon.**
+The `docker-compose.override.yml.example` file contains optional volume mounts you can activate by copying and uncommenting:
 
 ```sh
 cp docker-compose.override.yml.example docker-compose.override.yml
+# Edit the file and uncomment the mounts you need
 docker compose up -d
 ```
 
-See `docker-compose.override.yml.example` for details and security warnings.
+**Available options:**
+- **Acquia Cloud credentials** — Mount `~/.acquia` read-only for Acquia CLI access
+- **Docker socket** — Mount `/var/run/docker.sock` for running Lando/Docker commands inside Code Server (grants root-equivalent host access — see security warning in the file)
 
 ---
 
