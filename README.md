@@ -12,7 +12,7 @@ Built for PHP/Drupal development, with Composer, Drush Launcher, and a curated s
 - **PHP 8.3** + Composer + Drush Launcher
 - **Node.js 22 LTS** + npm + yarn
 - **Python 3** + pip
-- **Git** with SSH agent forwarding for push/pull access
+- **Git** with SSH key access via read-only `~/.ssh` mount
 - Declarative VS Code extension management via `extensions.txt`
 - Settings synced via git through `config/settings.json`
 
@@ -28,7 +28,7 @@ Your code lives on the host filesystem (`~/code`) and is mounted into the contai
 
 - **WSL2** with a Linux distribution installed
 - **Docker** with the WSL2 backend enabled
-- **SSH agent** running with your keys loaded (`ssh-add -l` to verify)
+- **SSH keys** in `~/.ssh` on the host (for git push/pull)
 
 ---
 
@@ -49,9 +49,6 @@ Your code lives on the host filesystem (`~/code`) and is mounted into the contai
    # Find your UID/GID
    id -u    # USER_UID
    id -g    # USER_GID
-
-   # Find your SSH agent socket
-   echo $SSH_AUTH_SOCK    # SSH_AUTH_SOCK
    ```
    Set `CODE_SERVER_PASSWORD` to a strong password. Set `HOST_CODE_DIR` to the absolute path of your code directory (e.g., `/home/ian/code`). Fill in `GIT_USER_NAME` and `GIT_USER_EMAIL`.
 
@@ -66,31 +63,16 @@ Your code lives on the host filesystem (`~/code`) and is mounted into the contai
 
 ---
 
-## SSH Agent Setup
+## SSH Setup
 
-SSH agent forwarding lets you use your host SSH keys inside the container for git operations without exposing private key files.
+Your host `~/.ssh` directory is mounted read-only into the container. As long as your SSH keys exist on the host, git operations over SSH will work inside the container with no additional configuration.
 
-1. Ensure your SSH agent is running and keys are loaded:
-   ```sh
-   eval "$(ssh-agent -s)"
-   ssh-add ~/.ssh/id_ed25519    # or your key path
-   ssh-add -l                   # verify keys are loaded
-   ```
+Test from inside the Code Server terminal:
+```sh
+ssh -T git@github.com
+```
 
-2. Set `SSH_AUTH_SOCK` in your `.env` to the output of:
-   ```sh
-   echo $SSH_AUTH_SOCK
-   ```
-
-3. **Important:** The socket path changes after reboots and agent restarts. If SSH stops working inside the container, update `SSH_AUTH_SOCK` in `.env` and restart:
-   ```sh
-   docker compose down && docker compose up -d
-   ```
-
-4. Test from inside the Code Server terminal:
-   ```sh
-   ssh -T git@github.com
-   ```
+If your keys require a passphrase, you'll be prompted when using them inside the container.
 
 ---
 
@@ -179,25 +161,28 @@ docker compose up -d
 
 ---
 
-## Advanced: Docker Socket Access
+## Advanced: Optional Mounts
 
-To run Docker or Lando commands from inside the Code Server terminal, you can mount the host Docker socket. **This grants the container root-equivalent access to the host Docker daemon.**
+The `docker-compose.override.yml.example` file contains optional volume mounts you can activate by copying and uncommenting:
 
 ```sh
 cp docker-compose.override.yml.example docker-compose.override.yml
+# Edit the file and uncomment the mounts you need
 docker compose up -d
 ```
 
-See `docker-compose.override.yml.example` for details and security warnings.
+**Available options:**
+- **Acquia Cloud credentials** — Mount `~/.acquia` read-only for Acquia CLI access
+- **Docker socket** — Mount `/var/run/docker.sock` for running Lando/Docker commands inside Code Server (grants root-equivalent host access — see security warning in the file)
 
 ---
 
 ## Troubleshooting
 
-**SSH agent not working:**
-- Verify `SSH_AUTH_SOCK` in `.env` matches `echo $SSH_AUTH_SOCK` on the host
-- The socket path changes after reboots — update `.env` and restart
-- Ensure your host UID matches `USER_UID` in `.env` (`id -u` to check)
+**SSH not working:**
+- Verify your keys exist at `~/.ssh` on the host (e.g., `~/.ssh/id_ed25519`)
+- Ensure your host UID matches `USER_UID` in `.env` (`id -u` to check) — UID mismatch can prevent reading the mounted keys
+- Check permissions: keys should be `600`, the `.ssh` directory should be `700`
 
 **Files have wrong ownership on host:**
 - `USER_UID` and `USER_GID` in `.env` must match your WSL2 user (`id -u`, `id -g`)
@@ -214,7 +199,7 @@ See `docker-compose.override.yml.example` for details and security warnings.
 - Check that the file is not empty and contains valid JSON
 
 **`docker compose up` fails with invalid volume:**
-- `SSH_AUTH_SOCK` may be empty in `.env` — set it or comment out the SSH socket volume in `docker-compose.yml` if not needed
+- Ensure `HOST_CODE_DIR` is set in `.env` to a valid absolute path
 
 ---
 

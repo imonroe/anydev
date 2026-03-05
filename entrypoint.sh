@@ -14,15 +14,12 @@ else
   echo "Warning: GIT_USER_EMAIL is not set. Git commits will use defaults." >&2
 fi
 
-# Validate SSH agent socket
-if [ -n "${SSH_AUTH_SOCK:-}" ]; then
-  if [ ! -S "${SSH_AUTH_SOCK}" ]; then
-    echo "Warning: SSH_AUTH_SOCK is set to '${SSH_AUTH_SOCK}' but the socket does not exist." >&2
-    echo "  SSH agent forwarding will not work. Check that your SSH agent is running" >&2
-    echo "  and update SSH_AUTH_SOCK in .env if the path has changed." >&2
-  fi
+# Validate SSH keys are accessible
+if [ -d /home/coder/.ssh ] && [ -n "$(ls -A /home/coder/.ssh 2>/dev/null)" ]; then
+  echo "SSH keys detected at /home/coder/.ssh" >&2
 else
-  echo "Warning: SSH_AUTH_SOCK is not set. SSH agent forwarding is disabled." >&2
+  echo "Warning: No SSH keys found. ~/.ssh may not be mounted or is empty." >&2
+  echo "  Git operations over SSH will not work." >&2
 fi
 
 # Hand off to code-server (or whatever CMD is defined)
