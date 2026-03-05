@@ -5,21 +5,35 @@ services:
       args:
         USER_UID: ${USER_UID:-1000}
         USER_GID: ${USER_GID:-1000}
+        DOCKER_GID: ${DOCKER_GID:-1001}
     ports:
       - "${CODE_SERVER_PORT:-8080}:8080"
     environment:
       - PASSWORD=${CODE_SERVER_PASSWORD:?CODE_SERVER_PASSWORD must be set and non-empty}
       - GIT_USER_NAME=${GIT_USER_NAME}
       - GIT_USER_EMAIL=${GIT_USER_EMAIL}
+      - HOST_CODE_DIR=${HOST_CODE_DIR}
       - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - ACQUIA_KEY=${ACQUIA_KEY}
+      - ACQUIA_SECRET=${ACQUIA_SECRET}
+      - ACSF_API_KEY=${ACSF_API_KEY}
+      - ACSF_USERNAME=${ACSF_USERNAME}
+      - OPENAI_KEY=${OPENAI_KEY}
+      - HOMEASSISTANT_WEBHOOK=${HOMEASSISTANT_WEBHOOK}
+      - VAULT_ADDR=${VAULT_ADDR}
+      - VAULT_USER=${VAULT_USER}
+      - VAULT_PASS=${VAULT_PASS}
     volumes:
       - ${HOST_CODE_DIR:?HOST_CODE_DIR must be set to an absolute host path}:/home/coder/code
+      - ${HOST_CODE_DIR}:${HOST_CODE_DIR}
+      - ~/.lando:/home/coder/.lando
       - code-server-extensions:/home/coder/.local/share/code-server/extensions
       - ./config/settings.json:/home/coder/.local/share/code-server/User/settings.json
       - ~/.ssh:/home/coder/.ssh:ro
       - npm-cache:/home/coder/.npm
       - ${CLAUDE_CONFIG_DIR:-~/.claude}:/home/coder/.claude
       - ${CLAUDE_CREDENTIALS:-~/.claude.json}:/home/coder/.claude.json
+      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
 
 volumes:

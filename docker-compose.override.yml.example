@@ -3,6 +3,9 @@
 # Copy this file to docker-compose.override.yml to activate optional features.
 # Uncomment only the sections you need.
 # docker-compose.override.yml is gitignored and must NEVER be committed.
+#
+# Note: /var/run/docker.sock, Docker CLI, and Lando CLI are already built into
+# the container and docker-compose.yml. No override is needed for those.
 
 services:
   code-server:
@@ -10,14 +13,4 @@ services:
       # --- Acquia Cloud credentials ---
       # Mount your host ~/.acquia directory (read-only) for Acquia CLI access.
       # Only enable if ~/.acquia exists on the host.
-      # - ~/.acquia:/home/coder/.acquia:ro
-
-      # --- Docker socket access ---
-      # ⚠️  SECURITY WARNING: Mounting the Docker socket grants the container
-      #     root-equivalent access to the host Docker daemon. Only enable this
-      #     if you need to run Lando or Docker commands from inside Code Server.
-      # - /var/run/docker.sock:/var/run/docker.sock
-    # If using Docker socket access, the coder user may need to be in the
-    # docker group. You can add this to entrypoint.sh or run:
-    #   sudo groupadd -g <host-docker-gid> docker
-    #   sudo usermod -aG docker coder
+      #- ~/.acquia:/home/coder/.acquia:ro

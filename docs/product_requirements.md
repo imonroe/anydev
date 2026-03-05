@@ -108,7 +108,7 @@ The Code Server container and Lando containers are **sibling containers** manage
 - **Option C — Join Lando's Docker network:** Configure the Code Server container to join Lando's Docker network using `external: true` network references in Compose. This allows the Code Server container to reach Lando's PHP container directly for Drush operations without needing Lando CLI.
 - **Option D — Expose Lando services on fixed localhost ports:** Configure Lando to bind services to fixed localhost ports and access them from the Code Server container via `host.docker.internal`. Less elegant but straightforward.
 
-**Resolution approach:** Default to Option A for simplicity and security. Document Option B as an opt-in advanced configuration.
+**Resolution approach:** ~~Default to Option A.~~ **[Revised]** Option B+ is implemented: the Docker socket is always mounted, Docker CLI is installed in the image, and a full Lando CLI (with path-translation wrapper) is available inside the container. See `lando-wrapper.sh` and CLAUDE.md for the path-translation mechanism that bridges the `/home/coder/code` ↔ host path difference.
 
 ---
 
@@ -122,7 +122,7 @@ The Code Server container and Lando containers are **sibling containers** manage
 - **Alternative — Read-only `.ssh` mount:** Bind-mount `~/.ssh` as read-only into the container. Simpler, but copies key material into the container's accessible filesystem.
 - **For HTTPS git:** Use a Git credential helper by mounting the host's git config and credential store, or store a Personal Access Token in the `.env` file.
 
-**Resolution approach:** Default to SSH agent forwarding via `SSH_AUTH_SOCK` socket mount. Document `.ssh` bind-mount as fallback.
+**Resolution approach:** ~~SSH agent forwarding.~~ **[Revised]** Read-only `~/.ssh` bind-mount is used. Simpler, requires no socket path maintenance across reboots, and is equally secure (keys are read-only inside the container, and UID matching ensures correct permissions).
 
 ---
 
@@ -204,13 +204,17 @@ Sensitive variables (API keys, hosting tokens, etc.) should be added per-develop
 
 ---
 
-## Open Questions
+## Open Questions — Resolved
 
-1. **Drush access pattern:** Should the default setup support running Drush from within Code Server (via Docker socket or network bridging), or is a host terminal for Lando commands acceptable as the baseline?
-2. **PHP version flexibility:** Should the image support multiple PHP versions (e.g., via `update-alternatives`), or pin to a single version and rebuild to switch?
-3. **Node version management:** Is a version manager (`nvm`, `fnm`) worth including for projects requiring different Node versions, or is a single LTS version sufficient?
-4. **Persistence strategy for Code Server settings:** Should `settings.json` be volume-mounted from the repo (always in sync with git) or managed inside a named volume (editable in the UI)?
-5. **Multi-machine sync:** Is there a need to sync `.env` or the extensions list across machines (e.g., via a private dotfiles repo), or is manual copy acceptable?
+1. **Drush access pattern:** ~~Host terminal baseline.~~ **Resolved:** Full Lando CLI is available inside the container via a path-translation wrapper. Docker socket is always mounted. See implementation_plan.md Phase 6.
+
+2. **PHP version flexibility:** **Resolved:** Pinned to PHP 8.3. `PHP_VERSION` build arg makes it easy to change. Rebuild required to switch versions.
+
+3. **Node version management:** **Resolved:** Single LTS Node.js 22 via NodeSource. `NODE_MAJOR` build arg available. No `nvm`/`fnm`.
+
+4. **Persistence strategy for Code Server settings:** **Resolved:** `config/settings.json` is bind-mounted from the repo. VS Code UI edits write back to the file, keeping settings in git.
+
+5. **Multi-machine sync:** **Resolved:** Out of scope. Manual copy of `.env` from `.env.example` on each machine.
 
 ---
 

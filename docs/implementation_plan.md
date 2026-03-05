@@ -9,9 +9,11 @@ This document translates the PRD decisions and open questions into a concrete, s
 ## Resolved Open Questions
 
 ### 1. Drush Access Pattern
-**Decision:** Host terminal for Lando commands (Option A) is the baseline. No Drush integration inside the container for MVP.
+**Decision:** ~~Host terminal for Lando commands (Option A) is the baseline.~~ **[Revised]** Full Lando CLI is available inside the container via a path-translation wrapper. The Docker socket is always mounted.
 
-**Justification:** Mounting the Docker socket (Option B) grants the container root-equivalent access to the host Docker daemon — a meaningful security trade-off that should not be the default. The workflow split (Lando commands in a WSL2 terminal, code editing and git in Code Server) is a clean boundary. Option B is documented in `docker-compose.override.yml.example` with a clear security warning.
+**Revised justification:** The Docker socket mount (Option B security concern) is an acceptable trade-off given that the container runs as the host user (UID/GID match) and the environment is single-developer, local-only. The usability gain of having `lando drush`, `lando ssh`, and `lando start` work from the Code Server terminal outweighs the security consideration in this context.
+
+**Implementation:** `lando-wrapper.sh` translates CWD from `/home/coder/code/*` to `$HOST_CODE_DIR/*` before invoking the real Lando binary (`/usr/local/bin/lando.real`). Two additional volume mounts support this: `~/.lando:/home/coder/.lando` (config/cache sharing) and `${HOST_CODE_DIR}:${HOST_CODE_DIR}` (code accessible at host paths for Lando project root matching). See CLAUDE.md for full details.
 
 ---
 
@@ -19,6 +21,13 @@ This document translates the PRD decisions and open questions into a concrete, s
 **Decision:** Pin to PHP 8.3 as the single version. No `update-alternatives` multi-version support for MVP.
 
 **Justification:** Drupal 10/11 require PHP 8.1+, and teams typically pin to one version per project. The Lando stack (not this container) runs PHP for the application — this container's PHP is primarily for Composer, linting, and static analysis. A single pinned version simplifies the image. Switching PHP versions requires a rebuild, which is acceptable. Expose a `PHP_VERSION` build arg to make the pin visible and easy to change.
+
+---
+
+### 2a. SSH Access
+**Decision:** ~~SSH agent forwarding via `SSH_AUTH_SOCK`.~~ **[Revised]** Read-only bind-mount of `~/.ssh` into the container.
+
+**Revised justification:** The `SSH_AUTH_SOCK` socket path on WSL2 changes after reboots and agent restarts, requiring manual `.env` updates. The read-only bind-mount is simpler, requires no ongoing maintenance, and is secure (key files are not writable from inside the container). The host user's UID/GID match the container user, so key permissions work correctly.
 
 ---
 
@@ -73,14 +82,14 @@ This document translates the PRD decisions and open questions into a concrete, s
 
 ---
 
-### Phase 3 — SSH Agent Forwarding and Git Configuration
-**Goal:** SSH agent socket is forwarded into the container. Git is configured with the identity from `.env`. `git push` works from the Code Server terminal.
+### Phase 3 — SSH Key Access and Git Configuration
+**Goal:** ~~SSH agent socket is forwarded into the container.~~ **[Revised — uses bind-mount]** Host `~/.ssh` is mounted read-only into the container. Git is configured with the identity from `.env`. `git push` works from the Code Server terminal.
 
-**Success test:** With SSH agent running on the host and keys loaded, open a Code Server terminal and run `ssh -T git@github.com`. Confirm successful authentication. Run `git config --global user.name` and confirm it matches `GIT_USER_NAME` in `.env`.
+**Success test:** Open a Code Server terminal and run `ssh -T git@github.com`. Confirm successful authentication. Run `git config --global user.name` and confirm it matches `GIT_USER_NAME` in `.env`.
 
 **Files created or modified in this phase:**
 - `entrypoint.sh` (new — handles git config and execs code-server)
-- `docker-compose.yml` (add SSH socket mount and git environment variables)
+- `docker-compose.yml` (add `~/.ssh:ro` mount and git environment variables)
 - `Dockerfile` (COPY entrypoint.sh, set ENTRYPOINT)
 
 ---
@@ -99,13 +108,25 @@ This document translates the PRD decisions and open questions into a concrete, s
 ---
 
 ### Phase 5 — Override File, Cleanup, and Documentation
-**Goal:** Document the Docker socket advanced option, finalize the README with full setup instructions, and add the override example file.
+**Goal:** Document optional mounts, finalize the README with full setup instructions, and add the override example file.
 
 **Success test:** Follow the README setup instructions on a clean machine from scratch. The environment is running within 5 minutes.
 
 **Files created or modified in this phase:**
 - `docker-compose.override.yml.example` (new)
 - `README.md` (completed)
+
+---
+
+### Phase 6 — Lando CLI Integration
+**Goal:** Full Lando CLI available inside the container terminal. `lando start`, `lando drush`, `lando ssh`, etc. work as if running from the host.
+
+**Success test:** From the Code Server terminal, `cd` into a Lando project and run `lando drush status`. Confirm it returns site status from the running Lando appserver container.
+
+**Files created or modified in this phase:**
+- `lando-wrapper.sh` (new — path-translation wrapper)
+- `Dockerfile` (add Lando npm install, copy wrapper)
+- `docker-compose.yml` (add `~/.lando` volume, `${HOST_CODE_DIR}:${HOST_CODE_DIR}` volume, `HOST_CODE_DIR` env var)
 
 ---
 
@@ -346,26 +367,22 @@ Do this as the very first `RUN` after the ARG declarations — before installing
 
 ---
 
-### SSH_AUTH_SOCK Forwarding on WSL2
+### SSH Key Access — Bind-Mount Approach
 
-The SSH agent socket path on WSL2 is not fixed. It is typically something like `/run/user/1000/keyring/ssh` or `/tmp/ssh-XXXXXXXX/agent.XXXXX` and changes after reboots and agent restarts.
+**[Implementation note: agent forwarding was planned but bind-mount was chosen instead — see Resolved Open Questions.]**
 
-**Two-part solution:**
+The host `~/.ssh` directory is mounted read-only into the container:
+```yaml
+volumes:
+  - ~/.ssh:/home/coder/.ssh:ro
+```
 
-1. The developer sets `SSH_AUTH_SOCK` in `.env` to the output of `echo $SSH_AUTH_SOCK` in their WSL2 shell. This must be re-done if the path changes.
+This works because:
+- `coder` user has the same UID as the host user (UID 1000 by default), so key file permissions (`600`) are respected
+- Read-only mount prevents the container from modifying host keys
+- No socket path management or re-configuration after reboots
 
-2. In `docker-compose.yml`, both the `environment` and `volumes` sections reference the same variable:
-   ```yaml
-   environment:
-     - SSH_AUTH_SOCK=${SSH_AUTH_SOCK}
-   volumes:
-     - ${SSH_AUTH_SOCK}:${SSH_AUTH_SOCK}
-   ```
-   The volume mount makes the socket accessible inside the container at the same path. The env var tells SSH where to find it. Both must match.
-
-3. The socket file is owned by the host user. Inside the container, `coder` must have the same UID as the host user for the socket to be accessible — this is the whole point of UID parameterization. UID mismatch = silent SSH agent failure.
-
-4. If `SSH_AUTH_SOCK` is not set in `.env`, the volume entry resolves to `:` (invalid). Docker Compose will error. Emphasize this setup step in the README.
+If keys require passphrases, users are prompted interactively in the terminal (this works fine in code-server's integrated terminal).
 
 ---
 

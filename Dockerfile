@@ -2,8 +2,10 @@ FROM codercom/code-server:latest
 
 ARG USER_UID=1000
 ARG USER_GID=1000
+ARG DOCKER_GID=1001
 ARG PHP_VERSION=8.3
 ARG NODE_MAJOR=22
+ARG LANDO_VERSION=3.26.2
 
 # --- Root operations: UID/GID adjustment and system packages ---
 USER root
@@ -12,6 +14,10 @@ USER root
 RUN groupmod -g ${USER_GID} coder \
     && usermod -u ${USER_UID} -g ${USER_GID} coder \
     && chown -R ${USER_UID}:${USER_GID} /home/coder
+
+# Create docker group matching host socket GID and add coder to it
+RUN groupadd -g ${DOCKER_GID} docker \
+    && usermod -aG docker coder
 
 # System prerequisites
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -73,10 +79,26 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     && apt-get update && apt-get install -y --no-install-recommends gh \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Docker CLI (connects to host Docker via mounted socket)
+RUN curl -fsSL https://download.docker.com/linux/debian/gpg \
+    | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian $(lsb_release -sc) stable" \
+    > /etc/apt/sources.list.d/docker.list \
+    && apt-get update && apt-get install -y --no-install-recommends docker-ce-cli \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install Drush Launcher
 RUN curl -fsSL https://github.com/drush-ops/drush-launcher/releases/latest/download/drush.phar \
     -o /usr/local/bin/drush \
     && chmod +x /usr/local/bin/drush
+
+# Install Lando CLI (npm package; rename real binary so wrapper can replace it)
+RUN npm install -g @lando/core@${LANDO_VERSION} \
+    && mv /usr/local/bin/lando /usr/local/bin/lando.real
+
+# Install path-translation wrapper as the 'lando' command
+COPY lando-wrapper.sh /usr/local/bin/lando
+RUN chmod +x /usr/local/bin/lando
 
 # --- Switch to coder user for extensions and config ---
 USER coder

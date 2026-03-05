@@ -13,6 +13,10 @@ Built for PHP/Drupal development, with Composer, Drush Launcher, and a curated s
 - **Node.js 22 LTS** + npm + yarn
 - **Python 3** + pip
 - **Git** with SSH key access via read-only `~/.ssh` mount
+- **Docker CLI** — connected to the host Docker daemon via mounted socket
+- **Lando CLI** — fully functional inside the container (see [Lando Workflow](#lando-workflow))
+- **GitHub CLI** (`gh`)
+- **Claude Code** (`claude`) — authenticated via host credentials bind-mount
 - Declarative VS Code extension management via `extensions.txt`
 - Settings synced via git through `config/settings.json`
 
@@ -20,7 +24,7 @@ Built for PHP/Drupal development, with Composer, Drush Launcher, and a curated s
 
 Your code lives on the host filesystem (`~/code`) and is mounted into the container as a volume. The container provides the tooling; your files stay on disk and are never at risk when the container is rebuilt or removed.
 
-[Lando](https://lando.dev/) continues to manage application stacks (web server, database, PHP-FPM) independently on the host. The Code Server container handles editing via the VS Code interface and provides a terminal for git, Composer, and npm — not the application runtime.
+The host Docker socket is mounted into the container, giving the Docker CLI and Lando CLI direct access to the host Docker daemon. Lando environments started from inside Code Server create and manage containers on the host exactly as they would from a host terminal.
 
 ---
 
@@ -28,6 +32,7 @@ Your code lives on the host filesystem (`~/code`) and is mounted into the contai
 
 - **WSL2** with a Linux distribution installed
 - **Docker** with the WSL2 backend enabled
+- **Lando** installed on the host (the container uses the host's `~/.lando` config and daemon)
 - **SSH keys** in `~/.ssh` on the host (for git push/pull)
 
 ---
@@ -49,6 +54,9 @@ Your code lives on the host filesystem (`~/code`) and is mounted into the contai
    # Find your UID/GID
    id -u    # USER_UID
    id -g    # USER_GID
+
+   # Find the Docker socket GID
+   stat -c '%g' /var/run/docker.sock    # DOCKER_GID
    ```
    Set `CODE_SERVER_PASSWORD` to a strong password. Set `HOST_CODE_DIR` to the absolute path of your code directory (e.g., `/home/ian/code`). Fill in `GIT_USER_NAME` and `GIT_USER_EMAIL`.
 
@@ -95,24 +103,26 @@ Access Code Server at `http://localhost:8080` (or your configured port).
 
 ## Lando Workflow
 
-Lando commands run in a **separate WSL2 terminal** on the host — not inside Code Server:
+Lando commands work directly from the Code Server terminal — no need for a separate host terminal:
 
 ```sh
-# In a WSL2 host terminal:
-cd ~/code/my-drupal-site
+# In the Code Server terminal:
+cd /home/coder/code/my-drupal-site
 lando start
 lando drush cr
+lando ssh
 ```
 
-Use the Code Server terminal for git, Composer, npm, and Python tasks:
+**How it works:** A path-translation wrapper intercepts `lando` calls and maps the container code path (`/home/coder/code/...`) to its equivalent host path (e.g., `/home/ian/code/...`) before invoking Lando. This ensures Lando finds registered projects, correctly mounts volumes when starting new environments, and communicates with existing containers — all via the mounted Docker socket.
 
-```sh
-# In Code Server terminal:
-cd /home/coder/code/my-drupal-site
-git pull
-composer install
-npm run build
-```
+**Requirements for Lando to work:**
+- `HOST_CODE_DIR` must be set correctly in `.env` (the absolute path of your code dir on the host)
+- Lando must be installed on the host (the container shares the host's `~/.lando` config)
+- The Docker socket GID in `DOCKER_GID` must match the host (`stat -c '%g' /var/run/docker.sock`)
+
+**Limitations:**
+- `lando start` for projects outside `HOST_CODE_DIR` will not benefit from path translation
+- Lando certs generated inside the container go to `~/.lando` on the host (shared config — this is correct behavior)
 
 ---
 
@@ -173,7 +183,6 @@ docker compose up -d
 
 **Available options:**
 - **Acquia Cloud credentials** — Mount `~/.acquia` read-only for Acquia CLI access
-- **Docker socket** — Mount `/var/run/docker.sock` for running Lando/Docker commands inside Code Server (grants root-equivalent host access — see security warning in the file)
 
 ---
 
@@ -201,6 +210,18 @@ docker compose up -d
 **`docker compose up` fails with invalid volume:**
 - Ensure `HOST_CODE_DIR` is set in `.env` to a valid absolute path
 
+**Lando can't find project / "not in a lando app":**
+- Confirm `HOST_CODE_DIR` in `.env` matches the actual path of your code on the host
+- Confirm the project's `.lando.yml` is inside `HOST_CODE_DIR`
+- Verify `~/.lando` on the host is populated (Lando must have been run on the host at least once)
+
+**Lando Docker permission denied:**
+- `DOCKER_GID` in `.env` must match the host Docker socket GID: `stat -c '%g' /var/run/docker.sock`
+- Rebuild after changing the GID: `docker compose build && docker compose up -d`
+
+**`lando start` mounts wrong paths:**
+- This indicates `HOST_CODE_DIR` is set incorrectly — the wrapper translates paths using this value
+
 ---
 
 ## Project Structure
@@ -209,10 +230,11 @@ docker compose up -d
 anydev/
 ├── Dockerfile                          # Image definition
 ├── docker-compose.yml                  # Service configuration
-├── docker-compose.override.yml.example # Optional local overrides (e.g., Docker socket)
+├── docker-compose.override.yml.example # Optional local overrides
 ├── .env.example                        # Required environment variables
 ├── .dockerignore                       # Build context filtering
 ├── entrypoint.sh                       # Container startup script
+├── lando-wrapper.sh                    # Lando path-translation wrapper
 ├── extensions.txt                      # Declarative VS Code extension list
 ├── config/
 │   └── settings.json                   # VS Code settings (committed, bind-mounted)
