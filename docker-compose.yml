@@ -11,6 +11,7 @@ services:
       - PASSWORD=${CODE_SERVER_PASSWORD:?CODE_SERVER_PASSWORD must be set and non-empty}
       - GIT_USER_NAME=${GIT_USER_NAME}
       - GIT_USER_EMAIL=${GIT_USER_EMAIL}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
     volumes:
       - ${HOST_CODE_DIR:?HOST_CODE_DIR must be set to an absolute host path}:/home/coder/code
       - code-server-extensions:/home/coder/.local/share/code-server/extensions
