@@ -22,8 +22,11 @@ RUN groupadd -g ${DOCKER_GID} docker \
 # System prerequisites
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    dnsmasq \
+    iproute2 \
     git \
     gnupg \
+    gosu \
     lsb-release \
     ca-certificates \
     unzip \
@@ -94,7 +97,7 @@ RUN curl -fsSL https://github.com/drush-ops/drush-launcher/releases/latest/downl
 
 # Install Lando CLI (npm package; rename real binary so wrapper can replace it)
 RUN npm install -g @lando/core@${LANDO_VERSION} \
-    && mv /usr/local/bin/lando /usr/local/bin/lando.real
+    && ln -sf $(npm root -g)/@lando/core/bin/lando /usr/local/bin/lando.real
 
 # Install path-translation wrapper as the 'lando' command
 COPY lando-wrapper.sh /usr/local/bin/lando
@@ -107,6 +110,7 @@ USER coder
 RUN mkdir -p /home/coder/.npm-global \
     && npm config set prefix /home/coder/.npm-global \
     && echo 'export PATH="/home/coder/.npm-global/bin:$PATH"' >> /home/coder/.bashrc
+    && echo 'export PATH="/home/ian/.lando/bin:$PATH"' >> /home/coder/.bashrc
 ENV PATH="/home/coder/.npm-global/bin:${PATH}"
 
 # Install Claude Code globally as coder user
@@ -133,8 +137,11 @@ RUN failed_exts=""; \
       exit 1; \
     fi
 
+# Switch back to root for entrypoint (drops to coder via gosu at runtime)
+USER root
+
 # Copy entrypoint script
-COPY --chown=coder:coder entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 WORKDIR /home/coder/code

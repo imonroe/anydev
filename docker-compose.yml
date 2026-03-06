@@ -8,11 +8,14 @@ services:
         DOCKER_GID: ${DOCKER_GID:-1001}
     ports:
       - "${CODE_SERVER_PORT:-8080}:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - PASSWORD=${CODE_SERVER_PASSWORD:?CODE_SERVER_PASSWORD must be set and non-empty}
       - GIT_USER_NAME=${GIT_USER_NAME}
       - GIT_USER_EMAIL=${GIT_USER_EMAIL}
       - HOST_CODE_DIR=${HOST_CODE_DIR}
+      - HOST_HOME_DIR=${HOST_HOME_DIR}
       - GITHUB_TOKEN=${GITHUB_TOKEN}
       - ACQUIA_KEY=${ACQUIA_KEY}
       - ACQUIA_SECRET=${ACQUIA_SECRET}

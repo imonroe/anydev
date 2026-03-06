@@ -42,12 +42,21 @@ anydev/
 
 Lando CLI is installed in the container as `@lando/core` (npm). A path-translation wrapper (`lando-wrapper.sh`) sits in front of the real binary at `/usr/local/bin/lando.real`.
 
-**The path problem:** Lando registers project roots at host paths (e.g., `/home/ian/code/myproject`). Inside the container, those same files are at `/home/coder/code/myproject`. Without translation, Lando can't match the CWD to its project registry, and `lando start` would create containers with incorrect volume mount paths.
+**The path problem:** Lando registers project roots at host paths (e.g., `/home/ian/code/myproject`). Inside the container, the `coder` user's home is `/home/coder`, so those same files are at `/home/coder/code/myproject`. Without translation, two things break:
+1. Lando can't match the CWD to its project registry (wrong prefix)
+2. Lando calls `os.homedir()` to find `~/.lando` and to write Docker Compose bind-mount paths. Inside the container that returns `/home/coder/...`, but Docker daemon runs on the host where `/home/coder/...` doesn't exist — causing "is a directory" OCI errors when starting containers.
 
-**The solution:** `lando-wrapper.sh` translates the CWD from `/home/coder/code/*` to `$HOST_CODE_DIR/*` before calling `lando.real`. Two supporting requirements in `docker-compose.yml`:
+**The solution (two parts):**
+
+*Part 1 — Home directory symlink:* `entrypoint.sh` runs as root, reads `HOST_HOME_DIR` (e.g. `/home/ian`), and creates a symlink `${HOST_HOME_DIR} → /home/coder` inside the container. It also exports `HOME=${HOST_HOME_DIR}` before dropping to the `coder` user via `gosu`. This makes `os.homedir()` return the host path, so all generated Docker Compose files use valid host-side paths.
+
+*Part 2 — CWD translation:* `lando-wrapper.sh` translates the CWD from `/home/coder/code/*` to `$HOST_CODE_DIR/*` before calling `lando.real`, so Lando finds the correct project in its registry.
+
+Supporting requirements in `docker-compose.yml`:
 1. `~/.lando:/home/coder/.lando` — shares the host's Lando config, cache, and certificates
-2. `${HOST_CODE_DIR}:${HOST_CODE_DIR}` — mounts the code dir at its host path so translated paths resolve inside the container
-3. `HOST_CODE_DIR` is passed as an env var so the wrapper knows the host-side path
+2. `${HOST_CODE_DIR}:${HOST_CODE_DIR}` — mounts the code dir at its host path so translated CWD paths resolve inside the container
+3. `HOST_CODE_DIR` env var — used by the wrapper for CWD translation
+4. `HOST_HOME_DIR` env var — used by the entrypoint for the home symlink and `HOME` override
 
 ## Installed Tools (beyond the base image)
 
