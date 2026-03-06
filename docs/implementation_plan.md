@@ -140,13 +140,15 @@ The most critical file. Every layer ordering decision has cache implications.
 
 1. `FROM codercom/code-server:<version>` — The base provides Debian (bookworm), the `coder` user at UID 1000, and a working `code-server` binary. **Pin to a specific version tag** (not `latest`) for reproducibility. `latest` is acceptable during initial development.
 
-2. `ARG USER_UID=1000` / `ARG USER_GID=1000` / `ARG PHP_VERSION=8.3` / `ARG NODE_MAJOR=22` — Declare all build args immediately after FROM so they are available throughout the build. These are build args, not ENV vars — they are only needed during the build.
+2. `ARG USER_UID=1000` / `ARG USER_GID=1000` / `ARG DOCKER_GID=1001` / `ARG PHP_VERSION=8.3` / `ARG NODE_MAJOR=22` / `ARG LANDO_VERSION=3.26.2` — Declare all build args immediately after FROM so they are available throughout the build. These are build args, not ENV vars — they are only needed during the build.
 
 3. `USER root` — The base image drops to `coder` at the end of its own Dockerfile. Switch back to root to install system packages.
 
 4. `RUN` — **UID/GID adjustment.** Modify the existing `coder` user and group to match the `USER_UID`/`USER_GID` build args using `usermod` and `groupmod`. Then `chown -R` the home directory. Do this first, before installing anything, so all subsequent ownership is correct. See Tricky Details for the specifics.
 
-5. `RUN` — **System prerequisites.** Install `curl`, `git`, `gnupg`, `lsb-release`, `ca-certificates`, and anything needed to add third-party package repositories. This layer changes infrequently — near the top for maximum cache reuse.
+4a. `RUN groupadd -g ${DOCKER_GID} docker && usermod -aG docker coder` — Create a `docker` group matching the host socket GID and add `coder` to it. Must happen before switching to `coder` so the group membership is baked in.
+
+5. `RUN` — **System prerequisites.** Install `curl`, `git`, `gnupg`, `gosu`, `lsb-release`, `ca-certificates`, `dnsmasq`, `iproute2`, and anything needed to add third-party package repositories. `gosu` is required by entrypoint.sh for privilege drop; `dnsmasq` and `iproute2` are used to resolve `*.lndo.site` from inside the container. This layer changes infrequently — near the top for maximum cache reuse.
 
 6. `RUN` — **Add PHP repository.** Add the Ondrej Sury Debian PHP repository (note: Debian variant, not Ubuntu — see Gotcha 6). Separate from the install step so that changing the package list below gets a cache hit on the repo-add step.
 
@@ -162,6 +164,12 @@ The most critical file. Every layer ordering decision has cache implications.
 
 12. `RUN` — **Install global Drupal tooling.** Install Drush Launcher as a global tool. The correct approach is to download the drush launcher phar to `/usr/local/bin/drush` and `chmod +x` it — this puts it on PATH for all users without Composer global install complications. See Gotcha 7 for why `composer global require` as root is problematic.
 
+12a. `RUN` — **Install Docker CLI.** Add the official Docker apt repository and install `docker-ce-cli`. This provides the `docker` command connected to the host daemon via the mounted socket. Only the CLI is needed — the host daemon handles container execution.
+
+12b. `RUN npm install -g @lando/core@${LANDO_VERSION}` — Install Lando CLI as a global npm package (not via the `lando` installer binary). Rename the real binary: `ln -sf $(npm root -g)/@lando/core/bin/lando /usr/local/bin/lando.real`.
+
+12c. `COPY lando-wrapper.sh /usr/local/bin/lando` — Install the path-translation wrapper as the `lando` command. `chmod +x` in the same or following `RUN` step.
+
 13. `USER coder` — Switch to the `coder` user before installing extensions, so they land in `coder`'s home directory. **This switch must happen before the extension install step.** See Gotcha 1.
 
 14. `RUN mkdir -p /home/coder/.local/share/code-server/User` — Pre-create the settings directory as the `coder` user. This prevents Docker from creating a directory named `settings.json` when the bind-mount is applied. See Gotcha 2.
@@ -170,7 +178,8 @@ The most critical file. Every layer ordering decision has cache implications.
 
 16. `RUN` — **Install core VS Code extensions.** Iterate over `extensions.txt` and call `code-server --install-extension <id>` for each. Must run as `coder`. Extensions install to `/home/coder/.local/share/code-server/extensions/`.
 
-17. `COPY --chown=coder:coder entrypoint.sh /usr/local/bin/entrypoint.sh` — Copy and set executable. The `--chown` flag avoids a separate layer.
+17. `USER root` — Switch back to root before copying the entrypoint, since `entrypoint.sh` now runs as root and drops to `coder` via `gosu`.
+    `COPY entrypoint.sh /usr/local/bin/entrypoint.sh`
     `RUN chmod +x /usr/local/bin/entrypoint.sh`
 
 18. `WORKDIR /home/coder/code` — Set the default working directory to the mounted code volume so new terminals open there.
@@ -183,23 +192,31 @@ The most critical file. Every layer ordering decision has cache implications.
 
 **Key configuration items:**
 
-- `build.context: .` and `build.args` block — pass `USER_UID` and `USER_GID` from `.env` to the build process. This links build-time UID/GID to the runtime values.
+- `build.context: .` and `build.args` block — pass `USER_UID`, `USER_GID`, and `DOCKER_GID` from `.env` to the build process. `DOCKER_GID` must match the host Docker socket GID.
 
 - `ports` — map `${CODE_SERVER_PORT}:8080`. Code Server listens on 8080 inside the container by default.
 
+- `extra_hosts: host.docker.internal:host-gateway` — adds a `/etc/hosts` entry resolving `host.docker.internal` to the Docker bridge gateway. Required so the container can reach host services and for dnsmasq *.lndo.site routing.
+
 - `environment` block:
   - `PASSWORD=${CODE_SERVER_PASSWORD}` — the specific env var name code-server reads for auth
-  - `GIT_USER_NAME`
-  - `GIT_USER_EMAIL`
-  - `SSH_AUTH_SOCK=${SSH_AUTH_SOCK}` — see SSH details below
+  - `GIT_USER_NAME`, `GIT_USER_EMAIL` — passed to entrypoint for git config
+  - `HOST_CODE_DIR` — used by `lando-wrapper.sh` for CWD path translation
+  - `HOST_HOME_DIR` — used by entrypoint to set up home directory symlink so `os.homedir()` returns the host path
+  - `GITHUB_TOKEN` and any other API keys/secrets defined in `.env`
 
-- `volumes` block — three entries:
-  1. `${HOST_CODE_DIR}:/home/coder/code` — host code directory, read-write
-  2. `code-server-extensions:/home/coder/.local/share/code-server/extensions` — named volume for extension persistence
-  3. `./config/settings.json:/home/coder/.local/share/code-server/User/settings.json` — bind-mount, read-write (so UI edits flow back to the repo file)
-  4. `${SSH_AUTH_SOCK}:${SSH_AUTH_SOCK}` — SSH agent socket, same path inside and outside
+- `volumes` block:
+  1. `${HOST_CODE_DIR}:/home/coder/code` — host code directory at container path, read-write
+  2. `${HOST_CODE_DIR}:${HOST_CODE_DIR}` — same directory mounted at its host path so translated Lando CWD paths resolve inside the container
+  3. `~/.lando:/home/coder/.lando` — shares host Lando config, cache, and certificates
+  4. `code-server-extensions:/home/coder/.local/share/code-server/extensions` — named volume for extension persistence
+  5. `./config/settings.json:/home/coder/.local/share/code-server/User/settings.json` — bind-mount, read-write (so UI edits flow back to the repo file)
+  6. `~/.ssh:/home/coder/.ssh:ro` — SSH keys from host, read-only
+  7. `${CLAUDE_CONFIG_DIR:-~/.claude}:/home/coder/.claude` — Claude Code credentials passthrough
+  8. `${CLAUDE_CREDENTIALS:-~/.claude.json}:/home/coder/.claude.json` — Claude Code credentials passthrough
+  9. `/var/run/docker.sock:/var/run/docker.sock` — Docker socket for Docker CLI and Lando CLI
 
-- `volumes` top-level — declare: `code-server-extensions: {}`
+- `volumes` top-level — declare: `code-server-extensions: {}` and `npm-cache: {}`
 
 - `restart: unless-stopped` — useful for a dev tool that should survive reboots.
 
@@ -207,11 +224,12 @@ The most critical file. Every layer ordering decision has cache implications.
 
 ### `docker-compose.override.yml.example`
 
-Documents optional configurations that users can activate by copying to `docker-compose.override.yml` (gitignored).
+Documents optional per-developer volume mounts that users can activate by copying to `docker-compose.override.yml` (gitignored).
 
 **Content:**
-- Docker socket mount example (Option B for Lando): how to mount `/var/run/docker.sock:/var/run/docker.sock` with a security warning and a note that Lando CLI would also need to be installed inside the container.
-- Clear comment that this file is an example and `docker-compose.override.yml` must never be committed.
+- Acquia Cloud credentials mount: `~/.acquia:/home/coder/.acquia:ro` — for Acquia CLI access
+- Clear comment that this file is an example and `docker-compose.override.yml` must never be committed
+- Note that Docker socket, Docker CLI, and Lando CLI are already built into the base `docker-compose.yml` — no override needed for those
 
 ---
 
@@ -223,12 +241,14 @@ Committed to the repo. Documents every variable with example values for non-secr
 ```
 CODE_SERVER_PORT=8080
 CODE_SERVER_PASSWORD=          # Required. Set a strong password.
+HOST_HOME_DIR=/home/your-username  # Absolute host home path; find with: echo $HOME
 HOST_CODE_DIR=/home/your-username/code
 USER_UID=1000                  # Match output of: id -u
 USER_GID=1000                  # Match output of: id -g
+DOCKER_GID=1001                # Match output of: stat -c '%g' /var/run/docker.sock
 GIT_USER_NAME=Your Name
 GIT_USER_EMAIL=you@example.com
-SSH_AUTH_SOCK=                 # Set to output of: echo $SSH_AUTH_SOCK
+GITHUB_TOKEN=                  # Optional; for gh CLI and private repo access
 ```
 
 Add explanatory comments above each variable describing what it does and how to find the correct value.
@@ -262,32 +282,33 @@ Prevents unnecessary files from being sent to the Docker build daemon.
 - `docs/`
 - Any editor config files
 
-The build context only needs: `Dockerfile`, `entrypoint.sh`, `extensions.txt`, `config/settings.json`.
+The build context only needs: `Dockerfile`, `entrypoint.sh`, `lando-wrapper.sh`, `extensions.txt`, `config/settings.json`.
 
 ---
 
 ### `entrypoint.sh`
 
-Runs every time the container starts. Must be minimal and fast.
+Runs every time the container starts as **root** (the Dockerfile's final `USER` is `root`). Drops to `coder` at the end via `gosu`. Must be minimal and fast.
 
 **Responsibilities in order:**
 
 1. `set -euo pipefail` — strict mode so any error is immediately visible.
 
-2. **Configure git global identity** from environment variables:
-   ```sh
-   git config --global user.name "${GIT_USER_NAME:-}"
-   git config --global user.email "${GIT_USER_EMAIL:-}"
-   ```
-   Use `${VAR:-}` (default-to-empty) rather than `${VAR}` so `set -u` doesn't fail when the variable is unset. Emit a warning if either is empty.
+2. **Home directory setup** — If `HOST_HOME_DIR` is set and differs from `/home/coder`:
+   - `usermod -d "${HOST_HOME_DIR}" coder` — tells the OS (and `os.homedir()` in Node.js) that coder's home is the host path
+   - `mkdir -p "${HOST_HOME_DIR}" && chown coder:coder "${HOST_HOME_DIR}"` — create the directory if needed
+   - Symlink every dotfile from `/home/coder/.[!.]*` into `${HOST_HOME_DIR}/` — so tools using `HOME` find their config at the expected path (e.g., `~/.lando`, `~/.ssh`, `~/.claude`)
 
-3. **Validate SSH socket (optional but helpful):** If `SSH_AUTH_SOCK` is set but the socket file does not exist, emit a warning. Do not exit — code-server should start regardless. This helps debug the most common SSH forwarding failure mode (socket path changed after a reboot).
+3. **dnsmasq for *.lndo.site** — Detect the default gateway IP (`ip route`), write a dnsmasq config resolving `*.lndo.site` to that IP, start `dnsmasq`, and prepend `nameserver 127.0.0.1` to `/etc/resolv.conf`. This lets the Code Server browser (and curl inside the container) reach Lando development URLs.
 
-4. `exec "$@"` — **Critical.** Replaces the shell process with the code-server command so signals (SIGTERM, SIGINT) pass through correctly. Without `exec`, `docker stop` must wait for the full timeout before forcefully killing the container.
+4. **Configure git global identity** via `gosu coder git config --global ...` from `GIT_USER_NAME` and `GIT_USER_EMAIL`. Emit a warning if either is unset.
+
+5. **Validate SSH keys (optional but helpful):** Check that `~/.ssh` is accessible. Emit a warning if not; do not exit.
+
+6. `exec gosu coder "$@"` — **Critical.** Drops to the `coder` user and replaces the shell process with the code-server command so signals (SIGTERM, SIGINT) pass through correctly.
 
 **What the script must NOT do:**
 - Install extensions (done at build time — do not slow down every startup)
-- Run as root (the user is `coder` by the time Docker calls ENTRYPOINT)
 - Hardcode any values that belong in environment variables
 
 ---
@@ -337,16 +358,15 @@ The onboarding document. A developer on a new machine should be able to follow i
 
 **Sections:**
 
-1. **Prerequisites** — WSL2, Docker (WSL2 backend), SSH agent with keys loaded
-2. **First-Time Setup** — clone, copy `.env.example` → `.env`, fill in values, `docker compose build`, `docker compose up -d`, open browser
-3. **SSH Agent Setup** — explain that `SSH_AUTH_SOCK` must be set in `.env` to the output of `echo $SSH_AUTH_SOCK`; note the path changes after reboots/agent restarts
-4. **Daily Usage** — `docker compose up -d` / `docker compose down`, URL
-5. **Lando Workflow** — Lando commands run in a separate WSL2 terminal on the host; Code Server terminal is for git, Composer, npm, Python
-6. **Adding Extensions** — hybrid model explained; add to `extensions.txt` + rebuild for permanent additions, or install interactively for session-persistent additions
-7. **Rebuilding the Image** — `docker compose down`, optionally `docker volume rm <project>_code-server-extensions` (required if extensions changed), `docker compose build`, `docker compose up -d`
-8. **Changing PHP/Node Versions** — explain the build args
-9. **Advanced: Docker Socket Access** — document the override file approach with security warning
-10. **Troubleshooting** — common failure modes from the Gotchas section below
+1. **Prerequisites** — WSL2, Docker (WSL2 backend), Lando installed on host, SSH keys in `~/.ssh`
+2. **First-Time Setup** — clone, copy `.env.example` → `.env`, fill in values (including `HOST_HOME_DIR`, `HOST_CODE_DIR`, `DOCKER_GID`), `docker compose build`, `docker compose up -d`, open browser
+3. **Daily Usage** — `docker compose up -d` / `docker compose down`, URL
+4. **Lando Workflow** — run `lando` commands directly from the Code Server terminal; explain the path-translation wrapper; list requirements (`HOST_CODE_DIR`, `DOCKER_GID`, host Lando installation)
+5. **Adding Extensions** — hybrid model explained; add to `extensions.txt` + rebuild for permanent additions, or install interactively for session-persistent additions
+6. **Rebuilding the Image** — `docker compose down`, optionally `docker volume rm <project>_code-server-extensions` (required if extensions changed), `docker compose build`, `docker compose up -d`
+7. **Changing PHP/Node Versions** — explain the build args
+8. **Optional Mounts** — document the override file for Acquia credentials and other per-developer mounts
+9. **Troubleshooting** — common failure modes from the Gotchas section below
 
 ---
 
@@ -443,8 +463,8 @@ If `code-server --install-extension` runs as `root` in the Dockerfile, extension
 **Gotcha 2: settings.json created as directory**
 If `/home/coder/.local/share/code-server/User/` doesn't exist at runtime, Docker creates a directory named `settings.json` instead of a file. Code Server falls back to defaults silently. Pre-create the directory in the Dockerfile.
 
-**Gotcha 3: SSH_AUTH_SOCK not set in .env**
-The volume entry `${SSH_AUTH_SOCK}:${SSH_AUTH_SOCK}` resolves to `:` if the variable is unset — invalid syntax. Docker Compose errors or ignores the entry. SSH agent forwarding fails. Emphasize this step in the README. The entrypoint script can warn if the variable is set but the socket path doesn't exist.
+**Gotcha 3: DOCKER_GID mismatch breaks Docker socket access**
+`DOCKER_GID` in `.env` must match the GID of the host Docker socket (`stat -c '%g' /var/run/docker.sock`). If it doesn't, the container's `coder` user cannot access the socket and `docker` / `lando` commands fail with permission errors. Changing `DOCKER_GID` requires a rebuild (`docker compose build`) since it is a build arg used to create the `docker` group inside the image.
 
 **Gotcha 4: UID mismatch causes wrong file ownership**
 If `USER_UID` in `.env` doesn't match the WSL2 user's actual UID, files created inside the container appear on the host as owned by an unknown numeric UID. This breaks git and file watching. Verify with `id -u` on the host. Document this in the README.

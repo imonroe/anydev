@@ -37,6 +37,10 @@ Host Machine (Windows + WSL2)
 │   │   ├── PHP + Composer
 │   │   ├── Node.js + npm/yarn
 │   │   ├── Python + pip
+│   │   ├── Docker CLI (via mounted host socket)
+│   │   ├── Lando CLI (with path-translation wrapper)
+│   │   ├── GitHub CLI (gh)
+│   │   ├── Claude Code (claude)
 │   │   └── Volume: ~/code (host) → /home/coder/code (container)
 │   │
 │   └── [Lando containers]  ← Existing workflow, unchanged
@@ -64,7 +68,7 @@ The Code Server container and Lando containers are **sibling containers** manage
 | F-04 | The host `~/code` directory must be mounted read/write into the container |
 | F-05 | VS Code extensions must be declaratively defined and auto-installed on container start |
 | F-06 | Environment variables (API keys, tokens, etc.) must be injectable via `.env` file, not hardcoded in the image |
-| F-07 | SSH agent forwarding must work inside the container for git operations |
+| F-07 | SSH key access must work inside the container for git operations (via read-only `~/.ssh` bind-mount) |
 | F-08 | Git must be configured with host identity (name, email) via environment variables |
 | F-09 | The container must run as a non-root user with a UID/GID matching the WSL2 host user |
 | F-10 | The setup must be fully reproducible from a single `docker compose up` command |
@@ -194,11 +198,14 @@ portable-devenv/
 |----------|-------------|---------|
 | `CODE_SERVER_PORT` | Host port for Code Server UI | `8080` |
 | `CODE_SERVER_PASSWORD` | Password for Code Server web UI | `changeme` |
+| `HOST_HOME_DIR` | Absolute path to host home directory | `/home/ian` |
 | `HOST_CODE_DIR` | Absolute path to code directory on host | `/home/ian/code` |
 | `USER_UID` | UID to run container as | `1000` |
 | `USER_GID` | GID to run container as | `1000` |
+| `DOCKER_GID` | GID of host Docker socket (for socket access) | `1001` |
 | `GIT_USER_NAME` | Git commit author name | `Ian Monroe` |
 | `GIT_USER_EMAIL` | Git commit author email | `ian@example.com` |
+| `GITHUB_TOKEN` | GitHub personal access token for `gh` CLI | *(secret)* |
 
 Sensitive variables (API keys, hosting tokens, etc.) should be added per-developer in `.env` and documented but not valued in `.env.example`.
 
