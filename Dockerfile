@@ -109,7 +109,7 @@ USER coder
 # Configure npm global prefix for coder user (avoids needing root for npm install -g)
 RUN mkdir -p /home/coder/.npm-global \
     && npm config set prefix /home/coder/.npm-global \
-    && echo 'export PATH="/home/coder/.npm-global/bin:$PATH"' >> /home/coder/.bashrc
+    && echo 'export PATH="/home/coder/.npm-global/bin:$PATH"' >> /home/coder/.bashrc \
     && echo 'export PATH="/home/ian/.lando/bin:$PATH"' >> /home/coder/.bashrc
 ENV PATH="/home/coder/.npm-global/bin:${PATH}"
 
@@ -125,16 +125,16 @@ RUN mkdir -p /home/coder/.local/share/code-server/User \
 COPY extensions.txt /home/coder/extensions.txt
 RUN failed_exts=""; \
     while IFS= read -r ext || [ -n "$ext" ]; do \
-      ext=$(echo "$ext" | sed 's/#.*//;s/^[[:space:]]*//;s/[[:space:]]*$//'); \
-      [ -z "$ext" ] && continue; \
-      if ! code-server --install-extension "$ext"; then \
-        echo "Failed to install VS Code extension: $ext" >&2; \
-        failed_exts="${failed_exts} $ext"; \
-      fi; \
+    ext=$(echo "$ext" | sed 's/#.*//;s/^[[:space:]]*//;s/[[:space:]]*$//'); \
+    [ -z "$ext" ] && continue; \
+    if ! code-server --install-extension "$ext"; then \
+    echo "Failed to install VS Code extension: $ext" >&2; \
+    failed_exts="${failed_exts} $ext"; \
+    fi; \
     done < /home/coder/extensions.txt; \
     if [ -n "$failed_exts" ]; then \
-      echo "One or more VS Code extensions failed to install:${failed_exts}" >&2; \
-      exit 1; \
+    echo "One or more VS Code extensions failed to install:${failed_exts}" >&2; \
+    exit 1; \
     fi
 
 # Switch back to root for entrypoint (drops to coder via gosu at runtime)
