@@ -9,5 +9,6 @@
   "git.autofetch": false,
   "workbench.colorTheme": "Default Dark Modern",
   "redhat.telemetry.enabled": false,
-  "claudeCode.preferredLocation": "panel"
+  "claudeCode.preferredLocation": "panel",
+  "remote.autoForwardPortsSource": "hybrid"
 }
