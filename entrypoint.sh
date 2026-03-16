@@ -47,6 +47,81 @@ else
   echo "Warning: GIT_USER_EMAIL is not set. Git commits will use defaults." >&2
 fi
 
+# --- Claude Code configuration: symlink commands/agents, merge base settings ---
+CLAUDE_CONFIG_REPO="/home/coder/claude-config"
+CLAUDE_CONFIG_HOME="/home/coder/.claude"
+
+if [ -d "$CLAUDE_CONFIG_REPO" ]; then
+  # Symlink commands: repo files take precedence, existing extras are preserved
+  if [ -d "$CLAUDE_CONFIG_REPO/commands" ]; then
+    mkdir -p "$CLAUDE_CONFIG_HOME/commands"
+    for f in "$CLAUDE_CONFIG_REPO/commands"/*; do
+      [ -e "$f" ] || continue
+      target="$CLAUDE_CONFIG_HOME/commands/$(basename "$f")"
+      # Replace regular files with symlinks; leave existing symlinks alone
+      if [ -f "$target" ] && [ ! -L "$target" ]; then
+        rm "$target"
+      fi
+      if [ ! -e "$target" ]; then
+        ln -s "$f" "$target"
+      fi
+    done
+  fi
+
+  # Symlink agents: same logic
+  if [ -d "$CLAUDE_CONFIG_REPO/agents" ]; then
+    mkdir -p "$CLAUDE_CONFIG_HOME/agents"
+    for f in "$CLAUDE_CONFIG_REPO/agents"/*; do
+      [ -e "$f" ] || continue
+      target="$CLAUDE_CONFIG_HOME/agents/$(basename "$f")"
+      if [ -f "$target" ] && [ ! -L "$target" ]; then
+        rm "$target"
+      fi
+      if [ ! -e "$target" ]; then
+        ln -s "$f" "$target"
+      fi
+    done
+  fi
+
+  # Symlink default_mcp.json
+  if [ -f "$CLAUDE_CONFIG_REPO/default_mcp.json" ]; then
+    if [ -f "$CLAUDE_CONFIG_HOME/default_mcp.json" ] && [ ! -L "$CLAUDE_CONFIG_HOME/default_mcp.json" ]; then
+      rm "$CLAUDE_CONFIG_HOME/default_mcp.json"
+    fi
+    if [ ! -e "$CLAUDE_CONFIG_HOME/default_mcp.json" ]; then
+      ln -s "$CLAUDE_CONFIG_REPO/default_mcp.json" "$CLAUDE_CONFIG_HOME/default_mcp.json"
+    fi
+  fi
+
+  # Merge base settings: repo provides hooks/model/plugins, existing permissions preserved
+  if [ -f "$CLAUDE_CONFIG_REPO/settings.json" ]; then
+    EXISTING="$CLAUDE_CONFIG_HOME/settings.json"
+    BASE="$CLAUDE_CONFIG_REPO/settings.json"
+    if [ -f "$EXISTING" ]; then
+      # Merge: base settings win for everything except permissions (which come from existing)
+      python3 -c "
+import json, sys
+with open(sys.argv[1]) as f: base = json.load(f)
+with open(sys.argv[2]) as f: existing = json.load(f)
+# Preserve machine-local permissions from existing settings
+if 'permissions' in existing:
+    base['permissions'] = existing['permissions']
+with open(sys.argv[2], 'w') as f: json.dump(base, f, indent=2)
+    f.write('\n')
+" "$BASE" "$EXISTING"
+      echo "Claude Code settings merged (base + local permissions)." >&2
+    else
+      cp "$BASE" "$EXISTING"
+      echo "Claude Code settings initialized from base." >&2
+    fi
+  fi
+
+  chown -R coder:coder "$CLAUDE_CONFIG_HOME"
+  echo "Claude Code config synced from repo." >&2
+else
+  echo "Warning: claude-config not mounted at $CLAUDE_CONFIG_REPO — skipping." >&2
+fi
+
 # Validate SSH keys are accessible
 if [ -d /home/coder/.ssh ] && [ -n "$(ls -A /home/coder/.ssh 2>/dev/null)" ]; then
   echo "SSH keys detected at /home/coder/.ssh" >&2

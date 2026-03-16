@@ -1,0 +1,24 @@
+{
+  "model": "sonnet",
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "ToolPattern",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -X POST -H \"Content-Type: application/json\" -d '{\"message\": \"Attention: Claude has finished a task\"}' https://homeassist.ianmonroe.com/api/webhook/-2b00bPg0Gt4yQ1ZDtiyuwF_O"
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "context7@claude-plugins-official": true,
+    "code-review@claude-plugins-official": true,
+    "github@claude-plugins-official": true,
+    "ralph-loop@claude-plugins-official": true,
+    "playwright@claude-plugins-official": true,
+    "superpowers@claude-plugins-official": true
+  }
+}

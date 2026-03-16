@@ -1,0 +1,1 @@
+Take a look at the documents in the documentation directory to familiarize yourself with the project. Then, take a look at any currently open github issues. Think about where we are in terms of the implementation plan document and the github issues, and think about what the next logical step we should take. Tell me what that next step is, and ask me if we can proceed.

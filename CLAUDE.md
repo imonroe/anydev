@@ -21,6 +21,11 @@ anydev/
 ├── .gitignore                   # Ignores .env, docker-compose.override.yml, logs/
 ├── config/
 │   └── settings.json            # VS Code settings (bind-mounted into container)
+├── claude-config/               # Portable Claude Code customizations (tracked in repo)
+│   ├── commands/                # Slash commands (symlinked into ~/.claude/commands/)
+│   ├── agents/                  # Custom agent definitions (symlinked into ~/.claude/agents/)
+│   ├── settings.json            # Base settings: hooks, plugins, model (no permissions)
+│   └── default_mcp.json         # MCP server definitions
 └── docs/
     ├── product_requirements.md  # Functional & non-functional requirements
     └── implementation_plan.md   # Detailed implementation specs, gotchas
@@ -36,7 +41,7 @@ anydev/
 - **Secrets via `.env`:** Gitignored; `.env.example` committed as template
 - **Docker socket:** `/var/run/docker.sock` always mounted; `DOCKER_GID` build arg sets group membership so `coder` can use it without sudo
 - **Lando interop:** Full Lando CLI available inside the container via `lando-wrapper.sh` (see below)
-- **Claude Code:** Installed globally (`@anthropic-ai/claude-code`); `~/.claude` and `~/.claude.json` bind-mounted from host for credential passthrough
+- **Claude Code:** Installed globally (`@anthropic-ai/claude-code`); `~/.claude` and `~/.claude.json` bind-mounted from host for credential passthrough; portable customizations in `claude-config/` (see below)
 
 ## Lando Integration
 
@@ -57,6 +62,20 @@ Supporting requirements in `docker-compose.yml`:
 2. `${HOST_CODE_DIR}:${HOST_CODE_DIR}` — mounts the code dir at its host path so translated CWD paths resolve inside the container
 3. `HOST_CODE_DIR` env var — used by the wrapper for CWD translation
 4. `HOST_HOME_DIR` env var — used by the entrypoint for the home symlink and `HOME` override
+
+## Claude Code Customizations
+
+The `claude-config/` directory holds portable Claude Code configuration that travels with the repo. At container startup, `entrypoint.sh` syncs these into `~/.claude/`:
+
+- **`commands/`** and **`agents/`** — symlinked into `~/.claude/commands/` and `~/.claude/agents/`. Because they're symlinks, edits inside the container write back to the repo directory (and are visible via `git diff`).
+- **`default_mcp.json`** — symlinked into `~/.claude/default_mcp.json`.
+- **`settings.json`** — merged into `~/.claude/settings.json`. The repo version provides hooks, model, and plugin config. The `permissions` block from the existing `~/.claude/settings.json` is preserved (these are machine-specific path grants that accumulate as you approve tool use).
+
+**Adding a new command or agent:** Create the file in `claude-config/commands/` or `claude-config/agents/`, commit, and it will be available on any machine running this container.
+
+**Changing hooks or plugins:** Edit `claude-config/settings.json`. The change applies on next container restart.
+
+**Machine-specific overrides:** `~/.claude/settings.local.json` is never touched by the merge and remains local. Use it for per-machine MCP servers or permissions.
 
 ## Installed Tools (beyond the base image)
 

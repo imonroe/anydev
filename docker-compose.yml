@@ -36,6 +36,7 @@ services:
       - npm-cache:/home/coder/.npm
       - ${CLAUDE_CONFIG_DIR:-~/.claude}:/home/coder/.claude
       - ${CLAUDE_CREDENTIALS:-~/.claude.json}:/home/coder/.claude.json
+      - ./claude-config:/home/coder/claude-config
       - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
 

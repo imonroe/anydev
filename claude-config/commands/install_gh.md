@@ -1,0 +1,1 @@
+Install the GitHub CLI using the official installation method for this operating system. For macOS use homebrew, for Ubuntu/Debian use the official apt repository, and for other Linux distributions use the appropriate package manager or official installer. Test the installation when complete.

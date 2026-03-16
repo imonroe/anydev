@@ -1,0 +1,1 @@
+Take a look at the implementation plan file. Then take a look at the codebase as it currently exists. Update the implementation plan with anything which has been completed, and if any other changes need to be made to the plan to keep it logically consistent and complete, make those changes as well.
