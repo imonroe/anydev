@@ -103,11 +103,10 @@ if [ -d "$CLAUDE_CONFIG_REPO" ]; then
 import json, sys
 with open(sys.argv[1]) as f: base = json.load(f)
 with open(sys.argv[2]) as f: existing = json.load(f)
-# Preserve machine-local permissions from existing settings
 if 'permissions' in existing:
     base['permissions'] = existing['permissions']
-with open(sys.argv[2], 'w') as f: json.dump(base, f, indent=2)
-    f.write('\n')
+out = json.dumps(base, indent=2) + '\n'
+with open(sys.argv[2], 'w') as f: f.write(out)
 " "$BASE" "$EXISTING"
       echo "Claude Code settings merged (base + local permissions)." >&2
     else
