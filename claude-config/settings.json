@@ -1,17 +1,37 @@
 {
   "model": "sonnet",
   "hooks": {
+    "SessionStart": [],
+    "InstructionsLoaded": [],
+    "UserPromptSubmit": [],
+    "PreToolUse": [],
+    "PermissionRequest": [],
+    "PostToolUse": [],
+    "PostToolUseFailure": [],
+    "Notification": [],
+    "SubagentStart": [],
+    "Elicitation": [],
+    "ElicitationResult": [],
+    "SubagentStop": [],
+    "TeammateIdle": [],
+    "TaskCompleted": [],
+    "PreCompact": [],
+    "PostCompact": [],
+    "ConfigChange": [],
+    "WorktreeCreate": [],
+    "WorktreeRemove": [],
     "Stop": [
       {
         "matcher": "ToolPattern",
         "hooks": [
           {
             "type": "command",
-            "command": "curl -X POST -H \"Content-Type: application/json\" -d '{\"message\": \"Attention: Claude has finished a task\"}' https://homeassist.ianmonroe.com/api/webhook/-2b00bPg0Gt4yQ1ZDtiyuwF_O"
+            "command": "curl -X POST -H \"Content-Type: application/json\" -d '{\"message\": \"Attention: Claude has finished a task\"}' \"${CLAUDE_STOP_WEBHOOK_URL}\""
           }
         ]
       }
-    ]
+    ],
+    "SessionEnd": []
   },
   "enabledPlugins": {
     "context7@claude-plugins-official": true,

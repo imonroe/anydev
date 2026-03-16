@@ -1,6 +1,8 @@
 # Feature Implementation Pipeline
 
-You are coordinating a complete feature implementation using our specialized subagents. Follow this structured approach, taking into account any documentation which currently exists for this project:
+You are coordinating a complete feature implementation using our specialized subagents. Follow this structured approach, taking into account any documentation which currently exists for this project.
+
+**Important:** Not every feature requires every phase. Before starting, assess the scope and skip phases that are clearly irrelevant (e.g., a backend-only change doesn't need UX design; a simple UI tweak doesn't need a data engineer). State which phases you're skipping and why.
 
 ## Phase 1: Requirements & Design
 
@@ -18,7 +20,7 @@ You are coordinating a complete feature implementation using our specialized sub
    - Define the user flow and interaction patterns
    - Specify design system components to use
 
-3. **Use the technical lead-architect subagent** to:
+3. **Use the technical-architect subagent** to:
    - Review the requirements and design
    - Design the overall technical architecture
    - Identify components that need to be built/modified
@@ -56,15 +58,9 @@ You are coordinating a complete feature implementation using our specialized sub
    - Implement client-side validation and error handling
    - Ensure responsive design and accessibility
 
-8. **Use the full stack developer subagent** to:
-   - Review integration between frontend and backend
-   - Implement any missing pieces or glue code
-   - Ensure proper data flow throughout the system
-   - Handle any cross-cutting concerns
-
 ## Phase 4: Quality Assurance
 
-9. **Use the quality assurance engineer subagent** to:
+8. **Use the quality assurance engineer subagent** to:
 
    - Create comprehensive test cases
    - Implement automated tests (unit, integration, e2e)
@@ -72,7 +68,7 @@ You are coordinating a complete feature implementation using our specialized sub
    - Validate against acceptance criteria
    - Test edge cases and error scenarios
 
-10. **Use the security engineer subagent** to:
+9. **Use the security engineer subagent** to:
     - Review code for security vulnerabilities
     - Validate input sanitization and authentication
     - Check for proper authorization controls
@@ -80,7 +76,7 @@ You are coordinating a complete feature implementation using our specialized sub
 
 ## Phase 5: Site Reliability & Monitoring
 
-11. **Use the site reliability engineer subagent** to:
+10. **Use the site reliability engineer subagent** to:
     - Add appropriate monitoring and alerting
     - Review performance implications
     - Ensure proper logging and observability
@@ -89,7 +85,7 @@ You are coordinating a complete feature implementation using our specialized sub
 
 ## Phase 6: Final Review & PR Preparation
 
-12. **Use the technical lead-architect subagent** to:
+11. **Use the technical-architect subagent** to:
     - Conduct final code review
     - Ensure architectural consistency
     - Validate that all requirements are met
