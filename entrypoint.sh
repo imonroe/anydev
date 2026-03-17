@@ -129,5 +129,28 @@ else
   echo "  Git operations over SSH will not work." >&2
 fi
 
+# Persist Docker environment variables so they are available in code-server's
+# integrated terminal.  Code-server spawns a new bash session that doesn't
+# inherit PID 1's environment, so we write exports to a dedicated file and
+# source it from ~/.bashrc.
+ENV_FILE="/home/coder/.docker-env"
+: > "$ENV_FILE"
+for var in GITHUB_TOKEN GIT_USER_NAME GIT_USER_EMAIL \
+           HOST_CODE_DIR HOST_HOME_DIR \
+           ACQUIA_KEY ACQUIA_SECRET ACSF_API_KEY ACSF_USERNAME \
+           OPENAI_KEY HOMEASSISTANT_WEBHOOK CLAUDE_STOP_WEBHOOK_URL \
+           VAULT_ADDR VAULT_USER VAULT_PASS; do
+  val="${!var:-}"
+  if [ -n "$val" ]; then
+    printf 'export %s=%q\n' "$var" "$val" >> "$ENV_FILE"
+  fi
+done
+chown coder:coder "$ENV_FILE"
+# Ensure ~/.bashrc sources the file (idempotent — only adds the line once)
+BASHRC="/home/coder/.bashrc"
+if ! grep -q '\.docker-env' "$BASHRC" 2>/dev/null; then
+  printf '\n# Load Docker environment variables\n[ -f ~/.docker-env ] && . ~/.docker-env\n' >> "$BASHRC"
+fi
+
 # Drop to coder user and hand off to code-server (or whatever CMD is defined)
 exec gosu coder "$@"
