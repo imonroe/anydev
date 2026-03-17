@@ -36,7 +36,7 @@ anydev/
 - **Non-root container user:** `coder` at UID/GID matching host (default 1000)
 - **Base image:** `codercom/code-server:latest` (Debian 12 / bookworm)
 - **Extension management:** Build-time install from `extensions.txt` + named volume for persistence
-- **SSH access:** Read-only `~/.ssh` bind-mount (no key material inside the container; passphrase prompts go through the mounted directory)
+- **SSH access:** `~/.ssh` bind-mounted read-write into the container (allows known_hosts updates; passphrase prompts go through the mounted directory)
 - **Settings:** `config/settings.json` bind-mounted, changes in VS Code write back to repo
 - **Secrets via `.env`:** Gitignored; `.env.example` committed as template
 - **Docker socket:** `/var/run/docker.sock` always mounted; `DOCKER_GID` build arg sets group membership so `coder` can use it without sudo
