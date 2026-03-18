@@ -115,8 +115,9 @@ USER coder
 RUN mkdir -p /home/coder/.npm-global \
     && npm config set prefix /home/coder/.npm-global \
     && echo 'export PATH="/home/coder/.npm-global/bin:$PATH"' >> /home/coder/.bashrc \
-    && echo 'export PATH="/home/ian/.lando/bin:$PATH"' >> /home/coder/.bashrc
-ENV PATH="/home/coder/.npm-global/bin:${PATH}"
+    && echo 'export PATH="/home/ian/.lando/bin:$PATH"' >> /home/coder/.bashrc \
+    && echo 'export PATH="/home/coder/code/src:$PATH"' >> /home/coder/.bashrc
+ENV PATH="/home/coder/.npm-global/bin:/home/coder/code/src:${PATH}"
 
 # Install Claude Code globally as coder user
 RUN npm install -g @anthropic-ai/claude-code
