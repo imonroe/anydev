@@ -27,7 +27,7 @@ This document translates the PRD decisions and open questions into a concrete, s
 ### 2a. SSH Access
 **Decision:** ~~SSH agent forwarding via `SSH_AUTH_SOCK`.~~ **[Revised]** Read-only bind-mount of `~/.ssh` into the container.
 
-**Revised justification:** The `SSH_AUTH_SOCK` socket path on WSL2 changes after reboots and agent restarts, requiring manual `.env` updates. The read-only bind-mount is simpler, requires no ongoing maintenance, and is secure (key files are not writable from inside the container). The host user's UID/GID match the container user, so key permissions work correctly.
+**Revised justification:** The `SSH_AUTH_SOCK` socket path on WSL2 changes after reboots and agent restarts, requiring manual `.env` updates. The bind-mount is simpler, requires no ongoing maintenance, and is secure given that the container runs as the same UID/GID as the host user. The mount is read-write (not read-only) to allow `known_hosts` updates when connecting to new servers.
 
 ---
 
@@ -162,9 +162,11 @@ The most critical file. Every layer ordering decision has cache implications.
 
 11. `RUN` — **Install Python 3 and pip.** Python 3 is often pre-installed on Debian-based images; explicitly install `python3-pip` and `python3-venv`. Clean apt cache.
 
+11a. `RUN` — **Install uv.** Use the official installer from `astral.sh/uv/install.sh`. Move the binaries (`uv`, `uvx`) from `/root/.local/bin/` to `/usr/local/bin/` so they're available to all users.
+
 12. `RUN` — **Install global Drupal tooling.** Install Drush Launcher as a global tool. The correct approach is to download the drush launcher phar to `/usr/local/bin/drush` and `chmod +x` it — this puts it on PATH for all users without Composer global install complications. See Gotcha 7 for why `composer global require` as root is problematic.
 
-12a. `RUN` — **Install Docker CLI.** Add the official Docker apt repository and install `docker-ce-cli`. This provides the `docker` command connected to the host daemon via the mounted socket. Only the CLI is needed — the host daemon handles container execution.
+12a. `RUN` — **Install Docker CLI + Compose plugin.** Add the official Docker apt repository and install `docker-ce-cli` and `docker-compose-plugin`. This provides the `docker` and `docker compose` commands connected to the host daemon via the mounted socket. Only the CLI is needed — the host daemon handles container execution.
 
 12b. `RUN npm install -g @lando/core@${LANDO_VERSION}` — Install Lando CLI as a global npm package (not via the `lando` installer binary). Rename the real binary: `ln -sf $(npm root -g)/@lando/core/bin/lando /usr/local/bin/lando.real`.
 
@@ -203,7 +205,10 @@ The most critical file. Every layer ordering decision has cache implications.
   - `GIT_USER_NAME`, `GIT_USER_EMAIL` — passed to entrypoint for git config
   - `HOST_CODE_DIR` — used by `lando-wrapper.sh` for CWD path translation
   - `HOST_HOME_DIR` — used by entrypoint to set up home directory symlink so `os.homedir()` returns the host path
-  - `GITHUB_TOKEN` and any other API keys/secrets defined in `.env`
+  - `GH_TOKEN=${GITHUB_TOKEN}` — GitHub CLI reads `GH_TOKEN` for authentication
+  - `ACQUIA_KEY`, `ACQUIA_SECRET`, `ACSF_API_KEY`, `ACSF_USERNAME` — Acquia/ACSF credentials
+  - `OPENAI_KEY`, `HOMEASSISTANT_WEBHOOK`, `CLAUDE_STOP_WEBHOOK_URL` — integration webhooks
+  - `VAULT_ADDR`, `VAULT_USER`, `VAULT_PASS` — HashiCorp Vault connection details
 
 - `volumes` block:
   1. `${HOST_CODE_DIR}:/home/coder/code` — host code directory at container path, read-write
@@ -211,10 +216,12 @@ The most critical file. Every layer ordering decision has cache implications.
   3. `~/.lando:/home/coder/.lando` — shares host Lando config, cache, and certificates
   4. `code-server-extensions:/home/coder/.local/share/code-server/extensions` — named volume for extension persistence
   5. `./config/settings.json:/home/coder/.local/share/code-server/User/settings.json` — bind-mount, read-write (so UI edits flow back to the repo file)
-  6. `~/.ssh:/home/coder/.ssh:ro` — SSH keys from host, read-only
-  7. `${CLAUDE_CONFIG_DIR:-~/.claude}:/home/coder/.claude` — Claude Code credentials passthrough
-  8. `${CLAUDE_CREDENTIALS:-~/.claude.json}:/home/coder/.claude.json` — Claude Code credentials passthrough
-  9. `/var/run/docker.sock:/var/run/docker.sock` — Docker socket for Docker CLI and Lando CLI
+  6. `~/.ssh:/home/coder/.ssh` — SSH keys from host, read-write (allows `known_hosts` updates)
+  7. `npm-cache:/home/coder/.npm` — named volume for npm cache persistence
+  8. `${CLAUDE_CONFIG_DIR:-~/.claude}:/home/coder/.claude` — Claude Code credentials passthrough
+  9. `${CLAUDE_CREDENTIALS:-~/.claude.json}:/home/coder/.claude.json` — Claude Code credentials passthrough
+  10. `./claude-config:/home/coder/claude-config` — portable Claude Code customizations (commands, agents, settings, MCP config)
+  11. `/var/run/docker.sock:/var/run/docker.sock` — Docker socket for Docker CLI and Lando CLI
 
 - `volumes` top-level — declare: `code-server-extensions: {}` and `npm-cache: {}`
 
@@ -299,13 +306,21 @@ Runs every time the container starts as **root** (the Dockerfile's final `USER` 
    - `mkdir -p "${HOST_HOME_DIR}" && chown coder:coder "${HOST_HOME_DIR}"` — create the directory if needed
    - Symlink every dotfile from `/home/coder/.[!.]*` into `${HOST_HOME_DIR}/` — so tools using `HOME` find their config at the expected path (e.g., `~/.lando`, `~/.ssh`, `~/.claude`)
 
-3. **dnsmasq for *.lndo.site** — Detect the default gateway IP (`ip route`), write a dnsmasq config resolving `*.lndo.site` to that IP, start `dnsmasq`, and prepend `nameserver 127.0.0.1` to `/etc/resolv.conf`. This lets the Code Server browser (and curl inside the container) reach Lando development URLs.
+3. **dnsmasq for *.lndo.site** — Detect the default gateway IP via `ip route`, write a dnsmasq config resolving `*.lndo.site` to that IP, start `dnsmasq`, and prepend `nameserver 127.0.0.1` to `/etc/resolv.conf`. Note: `/etc/resolv.conf` is a Docker bind-mount so `sed -i` (which renames) fails — use a temp copy and `cat` instead. This lets the Code Server browser (and curl inside the container) reach Lando development URLs.
 
 4. **Configure git global identity** via `gosu coder git config --global ...` from `GIT_USER_NAME` and `GIT_USER_EMAIL`. Emit a warning if either is unset.
 
-5. **Validate SSH keys (optional but helpful):** Check that `~/.ssh` is accessible. Emit a warning if not; do not exit.
+5. **Claude Code configuration sync** — If `claude-config/` is mounted at `/home/coder/claude-config`:
+   - Symlink `commands/` and `agents/` files into `~/.claude/commands/` and `~/.claude/agents/` (preserves existing non-repo files)
+   - Symlink `default_mcp.json` into `~/.claude/`
+   - Merge `settings.json`: base settings from repo win for everything except `permissions` (preserved from existing `~/.claude/settings.json`), using a Python one-liner for JSON merge
+   - `chown -R coder:coder ~/.claude`
 
-6. `exec gosu coder "$@"` — **Critical.** Drops to the `coder` user and replaces the shell process with the code-server command so signals (SIGTERM, SIGINT) pass through correctly.
+6. **Validate SSH keys (optional but helpful):** Check that `~/.ssh` is accessible. Emit a warning if not; do not exit.
+
+7. **Environment variable persistence** — Write all Docker-injected env vars (`GITHUB_TOKEN`, `GIT_USER_NAME`, `HOST_CODE_DIR`, `HOST_HOME_DIR`, `ACQUIA_KEY`, `VAULT_ADDR`, etc.) to `~/.docker-env` as `export VAR=VALUE` lines. Append a source line to `~/.bashrc` (idempotent — only adds once). This is necessary because Code Server's integrated terminal spawns new bash sessions that don't inherit PID 1's environment.
+
+8. `exec gosu coder "$@"` — **Critical.** Drops to the `coder` user and replaces the shell process with the code-server command so signals (SIGTERM, SIGINT) pass through correctly.
 
 **What the script must NOT do:**
 - Install extensions (done at build time — do not slow down every startup)
@@ -328,6 +343,7 @@ redhat.vscode-yaml                     # YAML (heavily used in Drupal config)
 eamodio.gitlens                        # Git history visualization
 EditorConfig.EditorConfig              # .editorconfig support (Drupal standards)
 streetsidesoftware.code-spell-checker  # Spell checking
+anthropic.claude-code                  # Official Claude Code extension
 ```
 
 Keep this list conservative. Extensions increase image size and build time. Project-specific extensions should be added interactively (they persist via the named volume).
@@ -391,15 +407,15 @@ Do this as the very first `RUN` after the ARG declarations — before installing
 
 **[Implementation note: agent forwarding was planned but bind-mount was chosen instead — see Resolved Open Questions.]**
 
-The host `~/.ssh` directory is mounted read-only into the container:
+The host `~/.ssh` directory is mounted read-write into the container:
 ```yaml
 volumes:
-  - ~/.ssh:/home/coder/.ssh:ro
+  - ~/.ssh:/home/coder/.ssh
 ```
 
 This works because:
 - `coder` user has the same UID as the host user (UID 1000 by default), so key file permissions (`600`) are respected
-- Read-only mount prevents the container from modifying host keys
+- Read-write mount allows the container to update `known_hosts` when connecting to new servers
 - No socket path management or re-configuration after reboots
 
 If keys require passphrases, users are prompted interactively in the terminal (this works fine in code-server's integrated terminal).

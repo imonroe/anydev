@@ -37,10 +37,12 @@ Host Machine (Windows + WSL2)
 │   │   ├── PHP + Composer
 │   │   ├── Node.js + npm/yarn
 │   │   ├── Python + pip
-│   │   ├── Docker CLI (via mounted host socket)
+│   │   ├── Docker CLI + Compose plugin (via mounted host socket)
 │   │   ├── Lando CLI (with path-translation wrapper)
 │   │   ├── GitHub CLI (gh)
-│   │   ├── Claude Code (claude)
+│   │   ├── Claude Code (claude) + portable config (claude-config/)
+│   │   ├── uv (fast Python package manager)
+│   │   ├── dnsmasq (resolves *.lndo.site inside container)
 │   │   └── Volume: ~/code (host) → /home/coder/code (container)
 │   │
 │   └── [Lando containers]  ← Existing workflow, unchanged
@@ -63,12 +65,12 @@ The Code Server container and Lando containers are **sibling containers** manage
 | ID | Requirement |
 |----|-------------|
 | F-01 | Code Server must be accessible via browser on a configurable local port |
-| F-02 | The container must have PHP (8.2+), Composer, Node.js (LTS), npm, yarn, Python 3, and pip installed |
+| F-02 | The container must have PHP (8.2+), Composer, Node.js (LTS), npm, yarn, Python 3, pip, venv, and uv installed |
 | F-03 | Global Drupal tooling must be available: Drush launcher, Drupal Console (where applicable) |
 | F-04 | The host `~/code` directory must be mounted read/write into the container |
 | F-05 | VS Code extensions must be declaratively defined and auto-installed on container start |
 | F-06 | Environment variables (API keys, tokens, etc.) must be injectable via `.env` file, not hardcoded in the image |
-| F-07 | SSH key access must work inside the container for git operations (via read-only `~/.ssh` bind-mount) |
+| F-07 | SSH key access must work inside the container for git operations (via read-write `~/.ssh` bind-mount, allowing `known_hosts` updates) |
 | F-08 | Git must be configured with host identity (name, email) via environment variables |
 | F-09 | The container must run as a non-root user with a UID/GID matching the WSL2 host user |
 | F-10 | The setup must be fully reproducible from a single `docker compose up` command |
@@ -175,16 +177,27 @@ The Code Server container and Lando containers are **sibling containers** manage
 
 ## Proposed File Structure
 ```
-portable-devenv/
+anydev/
 ├── Dockerfile
 ├── docker-compose.yml
 ├── docker-compose.override.yml.example   # optional local overrides
 ├── .env.example                          # documents required env vars
 ├── .gitignore                            # ignores .env, any secrets
-├── entrypoint.sh                         # startup script (extension installs, etc.)
+├── .dockerignore                         # build context filtering
+├── entrypoint.sh                         # startup script (git config, SSH, Claude config, dnsmasq)
+├── lando-wrapper.sh                      # Lando path-translation wrapper
 ├── extensions.txt                        # declarative list of VS Code extension IDs
 ├── config/
 │   └── settings.json                     # Code Server / VS Code settings
+├── claude-config/                        # Portable Claude Code customizations
+│   ├── commands/                         # Custom slash commands
+│   ├── agents/                           # Custom agent definitions
+│   ├── settings.json                     # Base Claude settings (hooks, model, plugins)
+│   └── default_mcp.json                  # MCP server definitions
+├── docs/
+│   ├── product_requirements.md           # This file
+│   └── implementation_plan.md            # Architecture and implementation details
+├── CLAUDE.md                             # AI assistant project guide
 └── README.md
 ```
 
@@ -206,6 +219,16 @@ portable-devenv/
 | `GIT_USER_NAME` | Git commit author name | `Ian Monroe` |
 | `GIT_USER_EMAIL` | Git commit author email | `ian@example.com` |
 | `GITHUB_TOKEN` | GitHub personal access token for `gh` CLI | *(secret)* |
+| `CLAUDE_CONFIG_DIR` | Absolute path to `~/.claude` on host | `/home/ian/.claude` |
+| `CLAUDE_CREDENTIALS` | Absolute path to `~/.claude.json` on host | `/home/ian/.claude.json` |
+| `ACQUIA_KEY` | Acquia Cloud API key | *(secret)* |
+| `ACQUIA_SECRET` | Acquia Cloud API secret | *(secret)* |
+| `ACSF_API_KEY` | Acquia Site Factory API key | *(secret)* |
+| `ACSF_USERNAME` | Acquia Site Factory username | *(secret)* |
+| `VAULT_ADDR` | HashiCorp Vault server address | `https://vault.example.com` |
+| `VAULT_USER` | Vault username | *(secret)* |
+| `VAULT_PASS` | Vault password | *(secret)* |
+| `CLAUDE_STOP_WEBHOOK_URL` | Webhook URL called when Claude Code finishes a task | *(optional)* |
 
 Sensitive variables (API keys, hosting tokens, etc.) should be added per-developer in `.env` and documented but not valued in `.env.example`.
 

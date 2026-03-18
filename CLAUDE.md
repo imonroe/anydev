@@ -41,6 +41,9 @@ anydev/
 - **Secrets via `.env`:** Gitignored; `.env.example` committed as template
 - **Docker socket:** `/var/run/docker.sock` always mounted; `DOCKER_GID` build arg sets group membership so `coder` can use it without sudo
 - **Lando interop:** Full Lando CLI available inside the container via `lando-wrapper.sh` (see below)
+- **dnsmasq for `*.lndo.site`:** `entrypoint.sh` starts a dnsmasq instance that resolves `*.lndo.site` to the Docker host gateway, so Lando development URLs are reachable from inside the container
+- **Environment persistence:** `entrypoint.sh` writes Docker env vars to `~/.docker-env`, which is sourced from `~/.bashrc`. This ensures environment variables are available in Code Server's integrated terminal (which spawns new bash sessions that don't inherit PID 1's environment)
+- **npm cache volume:** A named `npm-cache` volume persists npm's cache across container restarts
 - **Claude Code:** Installed globally (`@anthropic-ai/claude-code`); `~/.claude` and `~/.claude.json` bind-mounted from host for credential passthrough; portable customizations in `claude-config/` (see below)
 
 ## Lando Integration
@@ -53,7 +56,7 @@ Lando CLI is installed in the container as `@lando/core` (npm). A path-translati
 
 **The solution (two parts):**
 
-*Part 1 — Home directory symlink:* `entrypoint.sh` runs as root, reads `HOST_HOME_DIR` (e.g. `/home/ian`), and creates a symlink `${HOST_HOME_DIR} → /home/coder` inside the container. It also exports `HOME=${HOST_HOME_DIR}` before dropping to the `coder` user via `gosu`. This makes `os.homedir()` return the host path, so all generated Docker Compose files use valid host-side paths.
+*Part 1 — Home directory remapping:* `entrypoint.sh` runs as root, reads `HOST_HOME_DIR` (e.g. `/home/ian`), and calls `usermod -d "${HOST_HOME_DIR}" coder` to change coder's home in `/etc/passwd`. It then creates `${HOST_HOME_DIR}` and symlinks all dotfiles from `/home/coder/` into it. This makes `os.homedir()` (Node.js, gosu, etc.) return the host path, so all generated Docker Compose files use valid host-side paths.
 
 *Part 2 — CWD translation:* `lando-wrapper.sh` translates the CWD from `/home/coder/code/*` to `$HOST_CODE_DIR/*` before calling `lando.real`, so Lando finds the correct project in its registry.
 
@@ -85,12 +88,14 @@ The `claude-config/` directory holds portable Claude Code configuration that tra
 | Composer | Official installer | `composer` |
 | Node.js 22 LTS | NodeSource apt repo | `node`, `npm` |
 | yarn | `npm install -g` | `yarn` |
-| Python 3 + pip | apt | `python3`, `pip3` |
+| Python 3 + pip + venv | apt | `python3`, `pip3` |
+| uv | Official installer (astral.sh) | `uv`, `uvx` |
 | GitHub CLI | Official apt repo | `gh` |
-| Docker CLI | Official Docker apt repo | `docker` |
+| Docker CLI + Compose plugin | Official Docker apt repo | `docker`, `docker compose` |
 | Drush Launcher | phar download | `drush` |
 | Lando CLI | `npm install -g @lando/core` | `lando` (via wrapper) |
 | Claude Code | `npm install -g @anthropic-ai/claude-code` | `claude` |
+| dnsmasq + iproute2 | apt | dnsmasq service (resolves `*.lndo.site` to host gateway) |
 
 ## Build & Run
 
@@ -108,6 +113,7 @@ Build args: `USER_UID`, `USER_GID`, `DOCKER_GID`, `PHP_VERSION` (default 8.3), `
 1. Extensions must be installed as `coder` user, not root
 2. Pre-create parent directory before bind-mounting `settings.json`
 3. `HOST_CODE_DIR` must be set correctly — the Lando wrapper depends on it for path translation
+3a. `HOST_HOME_DIR` must be set correctly — the entrypoint uses it for home directory remapping and Lando path resolution
 4. UID mismatch between host and container causes file permission issues
 5. Named volume can shadow rebuilt extensions — delete volume to refresh
 6. Base image is Debian (bookworm), not Ubuntu — use correct PHP PPA (Ondrej Sury)
@@ -117,7 +123,7 @@ Build args: `USER_UID`, `USER_GID`, `DOCKER_GID`, `PHP_VERSION` (default 8.3), `
 
 ## Development Conventions
 
-- Default branch: `master`
+- Default branch: `main`
 - No CI pipeline configured
 - No test suite — this is a container configuration project
 - Keep secrets out of the image and repo; use `.env` for all credentials
