@@ -30,4 +30,9 @@ if [ -n "$HOST_CODE" ]; then
     fi
 fi
 
+# Suppress the punycode deprecation warning (DEP0040) that Lando triggers on
+# Node.js 21+. The built-in punycode module is deprecated but Lando's
+# dependencies still import it. This is cosmetic — Lando works fine.
+export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--disable-warning=DEP0040"
+
 exec /usr/local/bin/lando.real "$@"
