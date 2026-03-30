@@ -35,4 +35,6 @@ fi
 # dependencies still import it. This is cosmetic — Lando works fine.
 export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--disable-warning=DEP0040"
 
-exec /usr/local/bin/lando.real "$@"
+# Use the system Node (NodeSource-installed) rather than whatever nvm has active.
+# Lando should be independent of the project's Node version.
+exec /usr/bin/node /usr/local/bin/lando.real "$@"

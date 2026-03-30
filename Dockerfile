@@ -27,6 +27,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     gnupg \
     gosu \
+    libatomic1 \
     lsb-release \
     ca-certificates \
     unzip \
@@ -100,9 +101,42 @@ RUN curl -fsSL https://github.com/drush-ops/drush-launcher/releases/latest/downl
     -o /usr/local/bin/drush \
     && chmod +x /usr/local/bin/drush
 
+# Install nvm (Node Version Manager) for switching Node versions per project
+# PROFILE=/dev/null prevents nvm from modifying root's shell profiles during install;
+# we add the source lines to coder's .bashrc manually below.
+ARG NVM_VERSION=0.40.1
+RUN mkdir -p /home/coder/.nvm \
+    && curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v${NVM_VERSION}/install.sh \
+    | NVM_DIR=/home/coder/.nvm PROFILE=/dev/null bash \
+    && chown -R coder:coder /home/coder/.nvm
+
 # Install Lando CLI (npm package; rename real binary so wrapper can replace it)
+# Lando's plugin discovery looks in <core>/node_modules/@lando/, NOT in sibling global
+# packages — so all recipe/service plugins must be installed as local deps inside core.
+# Install a comprehensive set covering common Drupal 10 project stacks.
 RUN npm install -g @lando/core@${LANDO_VERSION} \
+    && cd $(npm root -g)/@lando/core && npm install \
+        @lando/drupal \
+        @lando/php \
+        @lando/mysql \
+        @lando/mariadb \
+        @lando/postgres \
+        @lando/nginx \
+        @lando/apache \
+        @lando/compose \
+        @lando/redis \
+        @lando/memcached \
+        @lando/solr \
+        @lando/elasticsearch \
+        @lando/varnish \
+        @lando/mailhog \
+        @lando/phpmyadmin \
+        @lando/node \
     && ln -sf $(npm root -g)/@lando/core/bin/lando /usr/local/bin/lando.real
+
+# Install Claude Code globally as root so coder user doesn't need a global npm prefix.
+# Installing it here keeps coder's .npmrc clean, avoiding nvm/prefix conflicts.
+RUN npm install -g @anthropic-ai/claude-code
 
 # Install path-translation wrapper as the 'lando' command
 COPY lando-wrapper.sh /usr/local/bin/lando
@@ -111,16 +145,15 @@ RUN chmod +x /usr/local/bin/lando
 # --- Switch to coder user for extensions and config ---
 USER coder
 
-# Configure npm global prefix for coder user (avoids needing root for npm install -g)
-RUN mkdir -p /home/coder/.npm-global \
-    && npm config set prefix /home/coder/.npm-global \
-    && echo 'export PATH="/home/coder/.npm-global/bin:$PATH"' >> /home/coder/.bashrc \
-    && echo 'export PATH="/home/ian/.lando/bin:$PATH"' >> /home/coder/.bashrc \
-    && echo 'export PATH="/home/coder/code/src:$PATH"' >> /home/coder/.bashrc
-ENV PATH="/home/coder/.npm-global/bin:/home/coder/code/src:${PATH}"
-
-# Install Claude Code globally as coder user
-RUN npm install -g @anthropic-ai/claude-code
+# Set up PATH additions and nvm sourcing for interactive shells.
+# No npm prefix is set — nvm manages per-version global installs;
+# system-level tools (claude, lando, etc.) are installed as root above.
+RUN echo 'export PATH="/home/ian/.lando/bin:$PATH"' >> /home/coder/.bashrc \
+    && echo 'export PATH="/home/coder/code/src:$PATH"' >> /home/coder/.bashrc \
+    && echo 'export NVM_DIR="/home/coder/.nvm"' >> /home/coder/.bashrc \
+    && echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> /home/coder/.bashrc \
+    && echo '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"' >> /home/coder/.bashrc
+ENV PATH="/home/coder/code/src:${PATH}"
 
 # Pre-create directories to prevent bind-mounts from creating them as directories
 RUN mkdir -p /home/coder/.local/share/code-server/User \
