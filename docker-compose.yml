@@ -39,6 +39,7 @@ services:
       - ${CLAUDE_CREDENTIALS:-~/.claude.json}:/home/coder/.claude.json
       - ./claude-config:/home/coder/claude-config
       - /var/run/docker.sock:/var/run/docker.sock
+      - ~/.acquia:/home/coder/.acquia:ro
     restart: unless-stopped
 
 volumes:
