@@ -88,6 +88,20 @@ RUN curl -fsSL https://bun.sh/install | bash \
     && ln -sf bun /usr/local/bin/bunx \
     && rm -rf /root/.bun
 
+# Install Playwright with the Chromium browser for agent-driven browsing.
+# Browsers live in a system-wide path (PLAYWRIGHT_BROWSERS_PATH) so they're
+# shared by the coder user and any project-local Playwright installs instead of
+# being re-downloaded per project. `--with-deps` also installs the OS libraries
+# Chromium needs via apt, which requires root (still in effect at this stage).
+# The browser dir is handed to coder so additional/updated browsers can be
+# installed later without sudo.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers
+RUN npm install -g playwright \
+    && mkdir -p /opt/pw-browsers \
+    && playwright install --with-deps chromium \
+    && chown -R coder:coder /opt/pw-browsers \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install GitHub CLI
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     | gpg --dearmor -o /usr/share/keyrings/githubcli-archive-keyring.gpg \
@@ -158,6 +172,7 @@ USER coder
 # system-level tools (claude, lando, etc.) are installed as root above.
 RUN echo 'export PATH="/home/ian/.lando/bin:$PATH"' >> /home/coder/.bashrc \
     && echo 'export PATH="/home/coder/code/src:$PATH"' >> /home/coder/.bashrc \
+    && echo 'export PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers' >> /home/coder/.bashrc \
     && echo 'export NVM_DIR="/home/coder/.nvm"' >> /home/coder/.bashrc \
     && echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> /home/coder/.bashrc \
     && echo '[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"' >> /home/coder/.bashrc

@@ -11,6 +11,7 @@ Built for PHP/Drupal development, with Composer, Drush Launcher, and a curated s
 - **Code Server** — VS Code in the browser, accessible on a configurable local port
 - **PHP 8.3** + Composer + Drush Launcher + Xdebug
 - **Node.js 22 LTS** + npm + yarn + [bun](https://bun.sh) (fast JavaScript runtime & package manager)
+- **[Playwright](https://playwright.dev)** + Chromium (with OS dependencies) — preinstalled for browser automation; browsers live in a shared `PLAYWRIGHT_BROWSERS_PATH`
 - **Python 3** + pip + venv + [uv](https://github.com/astral-sh/uv) (fast Python package manager)
 - **Git** with SSH key access via `~/.ssh` mount (read-write for `known_hosts` updates)
 - **Docker CLI + Compose plugin** — connected to the host Docker daemon via mounted socket
