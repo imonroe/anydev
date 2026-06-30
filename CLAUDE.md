@@ -88,6 +88,7 @@ The `claude-config/` directory holds portable Claude Code configuration that tra
 | Composer | Official installer | `composer` |
 | Node.js 22 LTS | NodeSource apt repo | `node`, `npm` |
 | yarn | `npm install -g` | `yarn` |
+| bun | Official installer (bun.sh) | `bun`, `bunx` |
 | Python 3 + pip + venv | apt | `python3`, `pip3` |
 | uv | Official installer (astral.sh) | `uv`, `uvx` |
 | GitHub CLI | Official apt repo | `gh` |

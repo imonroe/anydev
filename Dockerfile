@@ -80,6 +80,14 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
     && mv /root/.local/bin/uv /usr/local/bin/ \
     && mv /root/.local/bin/uvx /usr/local/bin/
 
+# Install bun (JavaScript runtime, bundler & package manager).
+# The installer drops bun into /root/.bun/bin; move it onto the system PATH so
+# it's available to the coder user without per-user profile changes (matches uv).
+RUN curl -fsSL https://bun.sh/install | bash \
+    && mv /root/.bun/bin/bun /usr/local/bin/bun \
+    && ln -sf bun /usr/local/bin/bunx \
+    && rm -rf /root/.bun
+
 # Install GitHub CLI
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     | gpg --dearmor -o /usr/share/keyrings/githubcli-archive-keyring.gpg \
